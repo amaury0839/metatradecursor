@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "Starting AI Forex Trading Bot..."
+streamlit run app/main.py

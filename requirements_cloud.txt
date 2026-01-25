@@ -1,0 +1,16 @@
+# Requirements for Streamlit Cloud (UI only, no MT5)
+
+# Core
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# UI
+streamlit>=1.28.0
+plotly>=5.18.0
+
+# API Client
+httpx>=0.25.0
+
+# Utilities
+python-dotenv>=1.0.0
+pytz>=2023.3

@@ -1,0 +1,47 @@
+# AI Forex Trading Bot - Dependencies
+# Python 3.11+
+
+# Core
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Trading
+# MetaTrader5>=5.0.45  # Optional - only available on Windows/Linux with MT5 installed
+# Install manually: pip install MetaTrader5 (if MT5 is installed on your system)
+pandas>=2.1.0
+numpy>=1.26.0
+# ta-lib>=0.4.28  # Optional - Technical Analysis Library (requires C library)
+
+# UI
+streamlit>=1.28.0
+plotly>=5.18.0
+
+# API Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+httpx>=0.25.0
+
+# AI
+google-generativeai>=0.3.0
+
+# News & HTTP
+httpx>=0.25.0
+requests>=2.31.0
+
+# Scheduling
+apscheduler>=3.10.0
+
+# Retries
+tenacity>=8.2.0
+
+# Logging
+structlog>=23.2.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+pytz>=2023.3
