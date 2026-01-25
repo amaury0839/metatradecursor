@@ -72,10 +72,12 @@ def main_trading_loop():
         if state.is_kill_switch_active():
             return
         
-        # Check connection
+        # Check connection - warn if not connected but continue with technical fallback
         if not mt5.is_connected():
-            logger.warning("MT5 not connected, skipping cycle")
-            return
+            logger.warning("⚠️ MT5 not connected - using technical signals only")
+            # Continue with technical signal processing instead of returning
+        else:
+            logger.info("✅ MT5 connected - using live account data")
         
         # Update account info
         account_info = mt5.get_account_info()

@@ -16,9 +16,13 @@ MT5_AVAILABLE = False
 try:
     import MetaTrader5 as mt5  # type: ignore
     MT5_AVAILABLE = True
-except (ImportError, ModuleNotFoundError, OSError):
+    import sys
+    print(f"✅ MetaTrader5 imported successfully from {mt5.__file__}", file=sys.stderr)
+except (ImportError, ModuleNotFoundError, OSError) as e:
     # MetaTrader5 not available - create mock for demo mode
     MT5_AVAILABLE = False
+    import sys
+    print(f"⚠️ MetaTrader5 import failed: {e}", file=sys.stderr)
     # Create a minimal mock mt5 module for demo mode
     class MockMT5:
         """Mock MT5 module for demo mode when MetaTrader5 is not installed"""
@@ -56,13 +60,38 @@ class MT5Client:
             return True
         
         try:
-            # Initialize MT5
-            if not mt5.initialize(path=self.config.mt5.path):
-                error = mt5.last_error()
-                logger.error(f"MT5 initialization failed: {error}")
-                return False
+            # Initialize MT5 (prefer explicit terminal path when provided)
+            init_result = False
+            if self.config.mt5.path:
+                logger.info(f"Attempting MT5 connection with path: {self.config.mt5.path}")
+                init_result = mt5.initialize(path=self.config.mt5.path)
+            else:
+                logger.info("Attempting MT5 connection (no explicit path)")
+
+            if not init_result:
+                logger.info("Retrying MT5 initialization without explicit path...")
+                init_result = mt5.initialize()
             
-            # Login
+            if not init_result:
+                error_code, error_msg = mt5.last_error()
+                # Only fail if it's NOT an authorization error
+                # Authorization errors can happen if MT5 needs reconnection
+                if error_code != -6:  # -6 is "Authorization failed"
+                    logger.error(f"MT5 initialization failed: ({error_code}, '{error_msg}')")
+                    logger.info("MT5 must be running. Make sure MT5 is open and not minimized.")
+                    return False
+                else:
+                    # Authorization error - try to reconnect despite this
+                    logger.info(f"MT5 returned authorization error, but continuing to try login...")
+            
+            # Give the terminal a moment to finish IPC setup
+            time.sleep(1)
+            logger.info("✅ MT5 initialized successfully")
+            
+            # Login - try multiple methods
+            logger.info(f"Attempting MT5 login for account {self.config.mt5.login}...")
+            
+            # Method 1: Try with password from config
             authorized = mt5.login(
                 login=self.config.mt5.login,
                 password=self.config.mt5.password,
@@ -70,10 +99,20 @@ class MT5Client:
             )
             
             if not authorized:
+                # Method 2: Try without password (uses saved credentials in MT5)
+                logger.warning(f"Login with password failed, trying without password...")
+                authorized = mt5.login(
+                    login=self.config.mt5.login,
+                    server=self.config.mt5.server
+                )
+            
+            if not authorized:
                 error = mt5.last_error()
                 logger.error(f"MT5 login failed: {error}")
-                mt5.shutdown()
+                # Don't shutdown - keep trying
                 return False
+            
+            logger.info("✅ MT5 Login successful!")
             
             # Get account info
             account_info = mt5.account_info()

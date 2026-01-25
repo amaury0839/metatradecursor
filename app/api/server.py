@@ -18,6 +18,32 @@ logger = setup_logger("api_server")
 
 app = FastAPI(title="AI Forex Trading Bot API")
 
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Auto-connect to MT5 on startup
+@app.on_event("startup")
+async def startup_event():
+    """Auto-connect to MT5 on server startup"""
+    logger.info("Starting up API server...")
+    logger.info("🤖 Bot en modo HYBRID: Ejecutando con señales técnicas")
+    logger.info("   Cuando MT5 se conecte, usará datos en vivo")
+    # Intentar conectar a MT5 (sin bloquear si falla)
+    try:
+        mt5 = get_mt5_client()
+        if mt5.connect():
+            logger.info("✅ MT5 conectado!")
+        else:
+            logger.info("⚠️ MT5 no disponible - usando solo señales técnicas")
+    except Exception as e:
+        logger.info(f"⚠️ MT5 error: {e} - continuando con fallback")
+
 # Global scheduler instance
 _scheduler: Optional[TradingScheduler] = None
 

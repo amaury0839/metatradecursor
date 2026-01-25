@@ -108,39 +108,31 @@ Provide a JSON response with:
 
 Be concise and focus on market impact."""
             
-            response = self.gemini.model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": 0.5,
-                    "max_output_tokens": 256,
-                }
+            # Use gemini client's generate_content method instead of direct model access
+            result_dict = self.gemini.generate_content(
+                system_prompt="You are a financial news sentiment analyzer.",
+                user_prompt=prompt,
+                use_cache=True
             )
             
-            # Parse response
-            response_text = response.text.strip()
-            
-            # Extract JSON
-            if "```json" in response_text:
-                start = response_text.find("```json") + 7
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            elif "```" in response_text:
-                start = response_text.find("```") + 3
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            
-            import json
-            result = json.loads(response_text)
+            if result_dict is None:
+                # Fallback when AI is unavailable
+                logger.debug("Sentiment analysis unavailable, returning neutral")
+                return {
+                    "score": 0.0,
+                    "summary": "Sentiment analysis unavailable",
+                    "headlines": headlines,
+                }
             
             # Validate and format
-            score = float(result.get("score", 0.0))
+            score = float(result_dict.get("score", 0.0))
             score = max(-1.0, min(1.0, score))  # Clamp to [-1, 1]
             
             return {
                 "score": score,
-                "summary": result.get("summary", "No summary available"),
+                "summary": result_dict.get("summary", "No summary available"),
                 "headlines": headlines,
-                "confidence": float(result.get("confidence", 0.5)),
+                "confidence": float(result_dict.get("confidence", 0.5)),
             }
             
         except Exception as e:

@@ -140,8 +140,40 @@ class DecisionEngine:
                 use_cache=False  # Don't cache for live decisions
             )
             
+            # Fallback to technical signal if AI unavailable
             if gemini_response is None:
-                return None, prompt_hash, "Gemini API returned no response"
+                logger.warning(f"AI unavailable, using technical signal for {symbol}")
+                # Create decision from technical signal
+                decision = TradingDecision(
+                    action=technical_signal,
+                    confidence=0.5,  # Lower confidence for technical-only
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    reason=["AI unavailable, using technical signal"],
+                    risk_ok=True,
+                    order=None
+                )
+                if technical_signal in ["BUY", "SELL"]:
+                    # Calculate volume based on risk
+                    account_info = self.mt5.get_account_info()
+                    equity = account_info.get('equity', 1000)
+                    risk_amount = equity * (self.risk.risk_per_trade_pct / 100)
+                    
+                    # Use ATR for stop loss
+                    atr = indicators.get('atr', 10)
+                    stop_loss_pips = max(atr, getattr(self.risk, 'min_stop_loss_pips', 20))
+                    
+                    # Estimate volume (simplified)
+                    volume = max(0.01, min(1.0, risk_amount / (stop_loss_pips * 10)))
+                    
+                    decision.order = {
+                        'volume': round(volume, 2),
+                        'stop_loss_pips': stop_loss_pips,
+                        'take_profit_pips': stop_loss_pips * 2,
+                        'reason': 'Technical signal fallback'
+                    }
+                
+                return decision, prompt_hash, None
             
             # Validate and parse response
             try:

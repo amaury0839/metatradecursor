@@ -49,6 +49,7 @@ class AIConfig(BaseSettings):
     """AI/Gemini configuration"""
     
     gemini_api_key: str = Field(..., alias="GEMINI_API_KEY")
+    gemini_model: str = Field("gemini-2-flash-exp", alias="GEMINI_MODEL")
     min_confidence_threshold: float = 0.62
     max_retries: int = 3
     timeout_seconds: int = 30
