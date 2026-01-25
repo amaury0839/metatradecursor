@@ -29,20 +29,26 @@ app.add_middleware(
 
 # Auto-connect to MT5 on startup
 @app.on_event("startup")
-async def startup_event():
+def startup_event():
     """Auto-connect to MT5 on server startup"""
     logger.info("Starting up API server...")
     logger.info("🤖 Bot en modo HYBRID: Ejecutando con señales técnicas")
     logger.info("   Cuando MT5 se conecte, usará datos en vivo")
-    # Intentar conectar a MT5 (sin bloquear si falla)
-    try:
-        mt5 = get_mt5_client()
-        if mt5.connect():
-            logger.info("✅ MT5 conectado!")
-        else:
-            logger.info("⚠️ MT5 no disponible - usando solo señales técnicas")
-    except Exception as e:
-        logger.info(f"⚠️ MT5 error: {e} - continuando con fallback")
+    
+    # Conectar a MT5 en background (no-blocking)
+    def connect_mt5_background():
+        try:
+            mt5 = get_mt5_client()
+            if mt5.connect():
+                logger.info("✅ MT5 conectado!")
+            else:
+                logger.info("⚠️ MT5 no disponible - usando solo señales técnicas")
+        except Exception as e:
+            logger.info(f"⚠️ MT5 error: {e} - continuando con fallback")
+    
+    # Start MT5 connection in background thread
+    mt5_thread = threading.Thread(target=connect_mt5_background, daemon=True)
+    mt5_thread.start()
 
 # Global scheduler instance
 _scheduler: Optional[TradingScheduler] = None
@@ -204,9 +210,14 @@ def start_trading_scheduler():
     """Start trading scheduler (called on server startup)"""
     global _scheduler
     if _scheduler is None:
-        _scheduler = TradingScheduler(main_trading_loop)
-        _scheduler.start()
-        logger.info("Trading scheduler started")
+        try:
+            _scheduler = TradingScheduler(main_trading_loop)
+            _scheduler.start()
+            logger.info("Trading scheduler started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start scheduler: {e}", exc_info=True)
+            _scheduler = None
+            # Don't fail - server can still run without scheduler
 
 
 @app.get("/symbols")

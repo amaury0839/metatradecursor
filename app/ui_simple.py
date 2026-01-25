@@ -495,6 +495,17 @@ elif page == "Risk Management":
 elif page == "AI Assistant":
     st.header("AI Assistant")
 
+    local = load_local_services()
+    if local.get("ok"):
+        config = local["get_config"]()
+        st.subheader("AI status")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"Model: {config.ai.gemini_model or 'Not set'}")
+        with col2:
+            st.write("API key configured: " + ("Yes" if config.ai.gemini_api_key else "No"))
+        st.divider()
+
     decisions_data, dec_error = api_get("/decisions")
     recent_decisions = decisions_data.get("decisions", []) if decisions_data else []
 

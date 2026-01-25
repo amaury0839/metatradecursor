@@ -27,12 +27,14 @@ class GeminiClient:
         try:
             genai.configure(api_key=self.config.ai.gemini_api_key)
             # Get model from config or use default
-            primary_model = getattr(self.config.ai, 'gemini_model', 'gemini-2-flash-exp')
+            primary_model = getattr(self.config.ai, "gemini_model", "gemini-2.0-pro-exp-02-05")
             fallback_models = [
                 primary_model,
-                'gemini-2-flash-exp',
-                'gemini-1.5-flash',
-                'gemini-pro'
+                "gemini-2.0-pro-exp-02-05",
+                "gemini-2.5-pro",
+                "gemini-2-flash-exp",
+                "gemini-1.5-flash",
+                "gemini-pro",
             ]
             
             # Try models in order
