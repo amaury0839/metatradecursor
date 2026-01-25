@@ -14,6 +14,16 @@ logger = setup_logger("risk")
 class RiskManager:
     """Manages risk checks and position sizing"""
     
+    # Crypto symbols (24/7 trading with higher spreads tolerance)
+    CRYPTO_SYMBOLS = [
+        'BTCUSD', 'ETHUSD', 'BNBUSD', 'SOLUSD', 'XRPUSD',
+        'DOGEUSD', 'ADAUSD', 'DOTUSD', 'LTCUSD', 'AVAXUSD'
+    ]
+    
+    # Spread limits by asset type (pips)
+    FOREX_MAX_SPREAD_PIPS = 10.0      # Forex: tight spreads expected
+    CRYPTO_MAX_SPREAD_PIPS = 300.0    # Crypto: much higher spreads are normal
+    
     def __init__(self):
         self.config = get_config()
         self.mt5 = get_mt5_client()
@@ -24,7 +34,6 @@ class RiskManager:
         self.max_daily_loss_pct = 90.0
         self.max_drawdown_pct = 90.0
         self.max_positions = 100
-        self.max_spread_pips = 10.0
         self.max_slippage_pips = 5.0
         self.max_trade_risk_pct = 50.0
         self.default_stop_loss_pct = 0.01
@@ -92,10 +101,18 @@ class RiskManager:
         if open_positions >= self.max_positions:
             failures.append(f"Max positions limit reached: {open_positions}/{self.max_positions}")
         
-        # 7. Check spread
+        # 7. Check spread (different limits for forex vs crypto)
         spread_pips = self.data.get_spread_pips(symbol)
-        if spread_pips is not None and spread_pips > self.max_spread_pips:
-            failures.append(f"Spread too high: {spread_pips:.2f} pips (max: {self.max_spread_pips})")
+        if spread_pips is not None:
+            # Determine max spread based on asset type
+            is_crypto = any(crypto in symbol.upper() for crypto in self.CRYPTO_SYMBOLS)
+            max_spread = self.CRYPTO_MAX_SPREAD_PIPS if is_crypto else self.FOREX_MAX_SPREAD_PIPS
+            
+            if spread_pips > max_spread:
+                asset_type = "crypto" if is_crypto else "forex"
+                failures.append(
+                    f"Spread too high for {asset_type}: {spread_pips:.2f} pips (max: {max_spread:.0f})"
+                )
         
         # 8. Check trading hours
         if not self._is_trading_hours():
