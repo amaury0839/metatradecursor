@@ -20,19 +20,31 @@ class MT5Config(BaseSettings):
 class TradingConfig(BaseSettings):
     """Trading configuration"""
     
-    mode: str = Field("PAPER", alias="MODE")
+    mode: str = Field("LIVE", alias="MODE")
     timezone: str = Field("America/New_York", alias="TIMEZONE")
     polling_interval_seconds: int = Field(30, alias="POLLING_INTERVAL_SECONDS")
     
-    # Default symbols
-    default_symbols: List[str] = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
+    # Default symbols - Forex + Crypto
+    default_symbols: List[str] = [
+        # Forex pairs
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
+        # Cryptocurrencies (24/7 trading)
+        "BTCUSD", "ETHUSD"
+    ]
     default_timeframe: str = "M15"
     
     # Risk defaults
-    default_risk_per_trade: float = Field(0.5, alias="DEFAULT_RISK_PER_TRADE")
-    default_max_daily_loss: float = Field(2.0, alias="DEFAULT_MAX_DAILY_LOSS")
-    default_max_drawdown: float = Field(8.0, alias="DEFAULT_MAX_DRAWDOWN")
-    default_max_positions: int = Field(2, alias="DEFAULT_MAX_POSITIONS")
+    # Aggressive but bounded defaults (can be overridden via .env)
+    default_risk_per_trade: float = Field(5.0, alias="DEFAULT_RISK_PER_TRADE")
+    default_max_daily_loss: float = Field(6.0, alias="DEFAULT_MAX_DAILY_LOSS")
+    default_max_drawdown: float = Field(12.0, alias="DEFAULT_MAX_DRAWDOWN")
+    default_max_positions: int = Field(3, alias="DEFAULT_MAX_POSITIONS")
+    
+    # Crypto-specific (can trade 24/7)
+    crypto_symbols: List[str] = [
+        "BTCUSD", "ETHUSD", "BNBUSD", "ADAUSD", "DOGEUSD", "XRPUSD"
+    ]
+    enable_crypto_trading: bool = Field(True, alias="ENABLE_CRYPTO_TRADING")
     
     @field_validator("mode")
     @classmethod
@@ -49,8 +61,8 @@ class AIConfig(BaseSettings):
     """AI/Gemini configuration - OPTIONAL for cloud deployment"""
     
     gemini_api_key: Optional[str] = Field(None, alias="GEMINI_API_KEY")
-    gemini_model: str = Field("gemini-2.0-pro-exp-02-05", alias="GEMINI_MODEL")
-    min_confidence_threshold: float = 0.62
+    gemini_model: str = Field("gemini-2.0-flash", alias="GEMINI_MODEL")
+    min_confidence_threshold: float = 0.30  # Más agresivo: umbral reducido
     max_retries: int = 3
     timeout_seconds: int = 30
     

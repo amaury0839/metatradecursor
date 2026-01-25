@@ -7,6 +7,7 @@ from app.core.config import get_config
 from app.core.logger import setup_logger
 from app.trading.mt5_client import get_mt5_client
 from app.trading.risk import get_risk_manager
+from app.trading.market_status import get_market_status
 
 # Try to import MetaTrader5 - optional dependency
 try:
@@ -37,6 +38,7 @@ class ExecutionManager:
         self.config = get_config()
         self.mt5 = get_mt5_client()
         self.risk = get_risk_manager()
+        self.market_status = get_market_status()
     
     def place_market_order(
         self,
@@ -99,6 +101,12 @@ class ExecutionManager:
             if not symbol_info:
                 return False, None, f"Cannot get symbol info for {symbol}"
             
+            # Check if market is open for trading
+            if not self.market_status.is_forex_market_open(symbol):
+                status_text = self.market_status.get_market_status_text(symbol)
+                logger.warning(f"Cannot trade {symbol}: {status_text}")
+                return False, None, f"{status_text} - Order rejected by market status"
+            
             # Prepare order request
             if order_type.upper() == "BUY":
                 order_type_mt5 = mt5.ORDER_TYPE_BUY
@@ -138,7 +146,15 @@ class ExecutionManager:
             result_dict = result._asdict()
             
             if result.retcode != mt5.TRADE_RETCODE_DONE:
-                return False, result_dict, f"Order rejected: {result.retcode} - {result.comment}"
+                error_msg = f"Order rejected by MT5: retcode={result.retcode}, comment='{result.comment}'"
+                if hasattr(result, 'volume'):
+                    error_msg += f", requested_volume={volume}, actual_volume={result.volume}"
+                logger.error(error_msg)
+
+                # If broker says mercado cerrado, bloqueamos temporalmente el símbolo para no insistir
+                if result.retcode == 10018 or "market closed" in str(result.comment).lower():
+                    self.market_status.block_symbol(symbol, minutes=60)
+                return False, result_dict, error_msg
             
             logger.info(
                 f"Order placed successfully: {order_type} {volume} lots of {symbol} "

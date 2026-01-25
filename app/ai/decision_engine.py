@@ -154,24 +154,29 @@ class DecisionEngine:
                     order=None
                 )
                 if technical_signal in ["BUY", "SELL"]:
-                    # Calculate volume based on risk
+                    # Calculate volume based on risk and ATR-derived stops
                     account_info = self.mt5.get_account_info()
-                    equity = account_info.get('equity', 1000)
-                    risk_amount = equity * (self.risk.risk_per_trade_pct / 100)
-                    
-                    # Use ATR for stop loss
-                    atr = indicators.get('atr', 10)
-                    stop_loss_pips = max(atr, getattr(self.risk, 'min_stop_loss_pips', 20))
-                    
-                    # Estimate volume (simplified)
-                    volume = max(0.01, min(1.0, risk_amount / (stop_loss_pips * 10)))
-                    
-                    decision.order = {
-                        'volume': round(volume, 2),
-                        'stop_loss_pips': stop_loss_pips,
-                        'take_profit_pips': stop_loss_pips * 2,
-                        'reason': 'Technical signal fallback'
-                    }
+                    equity = account_info.get("equity", 1000) if account_info else 1000
+                    risk_amount = equity * (min(self.risk.risk_per_trade_pct, self.risk.max_trade_risk_pct) / 100)
+
+                    atr = indicators.get("atr", 0)
+                    stop_distance = self.risk.get_default_stop_distance(current_price, atr)
+                    sl_price = current_price - stop_distance if technical_signal == "BUY" else current_price + stop_distance
+                    tp_price = current_price + (stop_distance * 2) if technical_signal == "BUY" else current_price - (stop_distance * 2)
+
+                    volume = self.risk.calculate_position_size(
+                        symbol=symbol,
+                        entry_price=current_price,
+                        stop_loss_price=sl_price,
+                        risk_amount=risk_amount,
+                    )
+
+                    from app.ai.schemas import OrderDetails
+                    decision.order = OrderDetails(
+                        volume_lots=volume,
+                        sl_price=sl_price,
+                        tp_price=tp_price,
+                    )
                 
                 return decision, prompt_hash, None
             

@@ -129,36 +129,30 @@ class TradingStrategy:
         signal = "HOLD"
         reasons = []
         
-        # Long signal conditions
-        if latest['trend_bullish']:
-            if prev['rsi'] < 50 and latest['rsi'] >= 50:
-                signal = "BUY"
-                reasons.append("EMA crossover bullish + RSI crossing above 50")
-            elif latest['rsi'] > self.rsi_neutral_low and latest['rsi'] < self.rsi_neutral_high:
-                # RSI in neutral zone with bullish trend
-                signal = "BUY"
-                reasons.append("Bullish trend + RSI in neutral zone")
-        
-        # Short signal conditions
-        elif latest['trend_bearish']:
-            if prev['rsi'] > 50 and latest['rsi'] <= 50:
-                signal = "SELL"
-                reasons.append("EMA crossover bearish + RSI crossing below 50")
-            elif latest['rsi'] > self.rsi_neutral_low and latest['rsi'] < self.rsi_neutral_high:
-                # RSI in neutral zone with bearish trend
-                signal = "SELL"
-                reasons.append("Bearish trend + RSI in neutral zone")
-        
-        # Add reasons to indicators
-        indicators['signal_reasons'] = reasons
-        indicators['signal'] = signal
-        
-        logger.debug(
-            f"Signal for {symbol}: {signal}, "
-            f"EMA fast={indicators['ema_fast']:.5f}, "
-            f"EMA slow={indicators['ema_slow']:.5f}, "
-            f"RSI={indicators['rsi']:.2f}"
+        # Log análisis antes de generar la señal
+        logger.info(
+            f"[ANALYSIS] Symbol: {symbol}, Timeframe: {timeframe}, Close: {indicators['close']:.5f}, "
+            f"EMA_fast: {indicators['ema_fast']:.5f}, EMA_slow: {indicators['ema_slow']:.5f}, "
+            f"RSI: {indicators['rsi']:.2f}, ATR: {indicators['atr']:.5f}, "
+            f"Trend Bullish: {indicators['trend_bullish']}, Trend Bearish: {indicators['trend_bearish']}, "
+            f"Signal: {signal}, Reasons: {indicators.get('signal_reasons', 'N/A')}"
         )
+        # Condiciones más flexibles para señales
+        if latest['trend_bullish']:
+            if latest['rsi'] > 45:
+                signal = "BUY"
+                reasons.append("Bullish trend + RSI > 45 (flexible)")
+            elif latest['rsi'] > self.rsi_neutral_low and latest['rsi'] < self.rsi_neutral_high:
+                signal = "BUY"
+                reasons.append("Bullish trend + RSI en zona neutral (flexible)")
+        elif latest['trend_bearish']:
+            if latest['rsi'] < 55:
+                signal = "SELL"
+                reasons.append("Bearish trend + RSI < 55 (flexible)")
+            elif latest['rsi'] > self.rsi_neutral_low and latest['rsi'] < self.rsi_neutral_high:
+                signal = "SELL"
+                reasons.append("Bearish trend + RSI en zona neutral (flexible)")
+        # ...existing code...
         
         return signal, indicators, None
     

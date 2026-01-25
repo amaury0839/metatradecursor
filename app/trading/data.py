@@ -94,12 +94,39 @@ class DataProvider:
                 return None
             
             # Convert to DataFrame
-            df = pd.DataFrame(rates)
+            # Handle both list of dicts and list of tuples
+            if isinstance(rates[0], dict):
+                df = pd.DataFrame(rates)
+            else:
+                # If it's tuples/namedtuples, convert to dict format
+                df = pd.DataFrame([
+                    {
+                        'time': r[0] if isinstance(r, (tuple, list)) else r.time,
+                        'open': r[1] if isinstance(r, (tuple, list)) else r.open,
+                        'high': r[2] if isinstance(r, (tuple, list)) else r.high,
+                        'low': r[3] if isinstance(r, (tuple, list)) else r.low,
+                        'close': r[4] if isinstance(r, (tuple, list)) else r.close,
+                        'tick_volume': r[5] if isinstance(r, (tuple, list)) else r.tick_volume,
+                        'spread': r[6] if isinstance(r, (tuple, list)) else r.spread,
+                    }
+                    for r in rates
+                ])
+            
+            # Ensure time column exists and convert
+            if 'time' not in df.columns:
+                logger.error(f"No 'time' column in data for {symbol}")
+                return None
+            
             df['time'] = pd.to_datetime(df['time'], unit='s')
             df.set_index('time', inplace=True)
             
-            # Rename columns for clarity
-            df.columns = ['open', 'high', 'low', 'close', 'tick_volume', 'spread', 'real_volume']
+            # Ensure correct column order
+            expected_cols = ['open', 'high', 'low', 'close', 'tick_volume', 'spread']
+            for col in expected_cols:
+                if col not in df.columns:
+                    df[col] = 0
+            
+            df = df[expected_cols]
             
             # Cache result
             self._cache[cache_key] = (df.copy(), now)

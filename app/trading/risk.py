@@ -19,18 +19,19 @@ class RiskManager:
         self.mt5 = get_mt5_client()
         self.data = get_data_provider()
         self.portfolio = get_portfolio_manager()
-        
-        # Risk parameters (can be overridden from UI)
-        self.risk_per_trade_pct = self.config.trading.default_risk_per_trade
-        self.max_daily_loss_pct = self.config.trading.default_max_daily_loss
-        self.max_drawdown_pct = self.config.trading.default_max_drawdown
-        self.max_positions = self.config.trading.default_max_positions
-        self.max_spread_pips = 1.5  # Default for major pairs
-        self.max_slippage_pips = 0.5
-        
-        # Trading hours (default: avoid rollover window 4:55pm - 5:10pm NY)
-        self.trading_hours_start = time(5, 10)  # 5:10 AM NY
-        self.trading_hours_end = time(16, 55)   # 4:55 PM NY
+        # Parámetros ajustados para demo
+        self.risk_per_trade_pct = 2.0
+        self.max_daily_loss_pct = 90.0
+        self.max_drawdown_pct = 90.0
+        self.max_positions = 100
+        self.max_spread_pips = 10.0
+        self.max_slippage_pips = 5.0
+        self.max_trade_risk_pct = 50.0
+        self.default_stop_loss_pct = 0.01
+        self.hard_max_volume_lots = 1.0  # Seguridad: no permitir que la IA pida >1 lote
+        # Horario extendido: operar 24h
+        self.trading_hours_start = time(0, 0)
+        self.trading_hours_end = time(23, 59)
     
     def check_all_risk_conditions(
         self, 
@@ -110,6 +111,11 @@ class RiskManager:
                 failures.append(f"Volume below minimum: {proposed_volume} < {min_volume}")
             if proposed_volume > max_volume:
                 failures.append(f"Volume above maximum: {proposed_volume} > {max_volume}")
+            # Hard cap independiente del broker
+            if proposed_volume > self.hard_max_volume_lots:
+                failures.append(
+                    f"Volume above bot cap: {proposed_volume} > {self.hard_max_volume_lots} (safety cap)"
+                )
         else:
             failures.append(f"Cannot get symbol info for {symbol}")
         
@@ -144,9 +150,10 @@ class RiskManager:
         if equity <= 0:
             return 0.01
         
-        # Calculate risk amount
+        # Calculate risk amount (bounded by max_trade_risk_pct)
         if risk_amount is None:
-            risk_amount = equity * (self.risk_per_trade_pct / 100)
+            capped_pct = min(self.risk_per_trade_pct, self.max_trade_risk_pct)
+            risk_amount = equity * (capped_pct / 100)
         
         # Get symbol info
         symbol_info = self.mt5.get_symbol_info(symbol)
@@ -177,7 +184,7 @@ class RiskManager:
         
         # Apply limits
         min_volume = symbol_info.get('volume_min', 0.01)
-        max_volume = symbol_info.get('volume_max', 100.0)
+        max_volume = min(symbol_info.get('volume_max', 100.0), self.hard_max_volume_lots)
         volume_step = symbol_info.get('volume_step', 0.01)
         
         lots = max(min_volume, min(max_volume, lots))
@@ -191,6 +198,41 @@ class RiskManager:
         )
         
         return lots
+
+    def get_default_stop_distance(self, entry_price: float, atr_value: Optional[float]) -> float:
+        """Fallback stop distance when ATR is missing/invalid."""
+        if atr_value and atr_value > 0:
+            return self.calculate_stop_loss_atr(atr_value)
+        return max(entry_price * self.default_stop_loss_pct, 0.0001)
+
+    def cap_volume_by_risk(
+        self,
+        symbol: str,
+        entry_price: float,
+        stop_loss_price: Optional[float],
+        requested_volume: float
+    ) -> float:
+        """Cap volume so the trade risk does not exceed max_trade_risk_pct."""
+        account_info = self.mt5.get_account_info()
+        if not account_info:
+            return requested_volume
+        equity = account_info.get("equity", 0)
+        if equity <= 0:
+            return requested_volume
+
+        if stop_loss_price is None:
+            return requested_volume
+
+        max_risk_amount = equity * (self.max_trade_risk_pct / 100)
+        max_volume = self.calculate_position_size(
+            symbol=symbol,
+            entry_price=entry_price,
+            stop_loss_price=stop_loss_price,
+            risk_amount=max_risk_amount,
+        )
+        # Aplica cap duro incluso si el sizing devolvió algo mayor
+        capped = min(requested_volume, max_volume, self.hard_max_volume_lots)
+        return capped
     
     def _is_trading_hours(self) -> bool:
         """Check if current time is within trading hours"""

@@ -395,6 +395,68 @@ class MT5Client:
             logger.error(f"Error getting orders: {e}")
         
         return []
+    
+    def get_history_deals(self, from_date: datetime, to_date: Optional[datetime] = None) -> List[Dict]:
+        """
+        Get historical deals (closed positions)
+        
+        Args:
+            from_date: Start date for history
+            to_date: End date for history (defaults to now)
+        
+        Returns:
+            List of deal dicts
+        """
+        if not self.is_connected():
+            return []
+        
+        if not MT5_AVAILABLE:
+            # Return empty list in demo mode
+            return []
+        
+        try:
+            if to_date is None:
+                to_date = datetime.now()
+            
+            deals = mt5.history_deals_get(from_date, to_date)
+            
+            if deals:
+                return [d._asdict() for d in deals]
+        except Exception as e:
+            logger.error(f"Error getting history deals: {e}")
+        
+        return []
+    
+    def get_history_orders(self, from_date: datetime, to_date: Optional[datetime] = None) -> List[Dict]:
+        """
+        Get historical orders
+        
+        Args:
+            from_date: Start date for history
+            to_date: End date for history (defaults to now)
+        
+        Returns:
+            List of order dicts
+        """
+        if not self.is_connected():
+            return []
+        
+        if not MT5_AVAILABLE:
+            # Return empty list in demo mode
+            return []
+        
+        try:
+            if to_date is None:
+                to_date = datetime.now()
+            
+            orders = mt5.history_orders_get(from_date, to_date)
+            
+            if orders:
+                return [o._asdict() for o in orders]
+        except Exception as e:
+            logger.error(f"Error getting history orders: {e}")
+        
+        return []
 
 
 # Global MT5 client instance

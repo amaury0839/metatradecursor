@@ -33,10 +33,15 @@ def render_strategy_local():
     st.markdown("### Symbols")
     available_symbols = data.mt5.get_symbols()[:20] if data.mt5.is_connected() else config.trading.default_symbols
     
+    # Ensure default symbols are in available symbols
+    default_symbols = [s for s in config.trading.default_symbols if s in available_symbols]
+    if not default_symbols:
+        default_symbols = available_symbols[:1] if available_symbols else []
+    
     selected_symbols = st.multiselect(
         "Select symbols to trade",
         options=available_symbols,
-        default=config.trading.default_symbols
+        default=default_symbols
     )
     
     if st.button("Update Symbols"):

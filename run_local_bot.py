@@ -14,16 +14,34 @@ def run_api_server():
         import uvicorn
         from app.api.server import app
         
-        logger.info("Starting API server on http://0.0.0.0:8000")
-        uvicorn.run(
-            app,
-            host="0.0.0.0",
-            port=8000,
-            log_level="info",
-            access_log=False
-        )
+        # Try multiple ports if 8000 is occupied
+        ports = [8000, 8001, 8002, 8003]
+        server_started = False
+        
+        for port in ports:
+            try:
+                logger.info(f"Attempting to start API server on http://0.0.0.0:{port}")
+                uvicorn.run(
+                    app,
+                    host="0.0.0.0",
+                    port=port,
+                    log_level="info",
+                    access_log=False
+                )
+                server_started = True
+                break
+            except OSError as e:
+                if "10048" in str(e) or "address already in use" in str(e).lower():
+                    logger.warning(f"Port {port} is in use, trying next port...")
+                    continue
+                else:
+                    raise
+        
+        if not server_started:
+            logger.warning("API server could not start on any port, continuing without API server")
+            
     except Exception as e:
-        logger.error(f"API server error: {e}", exc_info=True)
+        logger.warning(f"API server not available: {e}. Bot will continue with trading scheduler only.")
 
 
 def main():
@@ -39,14 +57,16 @@ def main():
         logger.info("✅ Trading scheduler started")
     except Exception as e:
         logger.error(f"Failed to start scheduler: {e}")
+        sys.exit(1)
     
-    # Start API server in background thread
-    api_thread = threading.Thread(target=run_api_server, daemon=False)
+    # Start API server in background thread (daemon=True so it doesn't block shutdown)
+    api_thread = threading.Thread(target=run_api_server, daemon=True)
     api_thread.start()
-    logger.info("API server thread started")
+    logger.info("API server thread started (daemon mode)")
     
     # Keep main thread alive
     try:
+        logger.info("🤖 Trading bot is running. Press Ctrl+C to stop.")
         while True:
             time.sleep(10)
     except KeyboardInterrupt:

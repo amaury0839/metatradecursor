@@ -55,12 +55,12 @@ class TradingDecision(BaseModel):
         # This validator just ensures action is one of the allowed values
         return v
     
-    def is_valid_for_execution(self, min_confidence: float = 0.62) -> bool:
+    def is_valid_for_execution(self, min_confidence: float = 0.30) -> bool:
         """
         Check if decision is valid for execution
         
         Args:
-            min_confidence: Minimum confidence threshold
+            min_confidence: Minimum confidence threshold (default 0.30 for aggressive trading)
         
         Returns:
             True if valid for execution
