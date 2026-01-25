@@ -84,16 +84,24 @@ def render_risk_local():
     # Spread and slippage
     st.markdown("### Spread & Slippage Limits")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        max_spread = st.number_input(
-            "Max Spread (pips)",
-            min_value=0.5,
-            max_value=10.0,
-            value=risk.max_spread_pips,
+        max_spread_forex = st.number_input(
+            "Max Spread Forex (pips)",
+            min_value=1.0,
+            max_value=50.0,
+            value=risk.FOREX_MAX_SPREAD_PIPS,
             step=0.5
         )
     with col2:
+        max_spread_crypto = st.number_input(
+            "Max Spread Crypto (pips)",
+            min_value=10.0,
+            max_value=500.0,
+            value=risk.CRYPTO_MAX_SPREAD_PIPS,
+            step=10.0
+        )
+    with col3:
         max_slippage = st.number_input(
             "Max Slippage (pips)",
             min_value=0.1,
@@ -103,7 +111,8 @@ def render_risk_local():
         )
     
     if st.button("Update Spread/Slippage"):
-        risk.max_spread_pips = max_spread
+        risk.FOREX_MAX_SPREAD_PIPS = max_spread_forex
+        risk.CRYPTO_MAX_SPREAD_PIPS = max_spread_crypto
         risk.max_slippage_pips = max_slippage
         st.success("Spread/slippage limits updated!")
     

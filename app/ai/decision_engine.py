@@ -93,12 +93,13 @@ class DecisionEngine:
                 logger.warning(f"Error getting news sentiment: {e}")
             
             # Build risk constraints
+            # Use forex max spread as default for display (crypto uses higher limits)
             risk_constraints = {
                 'risk_per_trade_pct': self.risk.risk_per_trade_pct,
                 'max_daily_loss_pct': self.risk.max_daily_loss_pct,
                 'max_drawdown_pct': self.risk.max_drawdown_pct,
                 'max_positions': self.risk.max_positions,
-                'max_spread_pips': self.risk.max_spread_pips,
+                'max_spread_pips': self.risk.FOREX_MAX_SPREAD_PIPS,  # Display forex limit (crypto uses higher)
             }
             
             # Get current positions
