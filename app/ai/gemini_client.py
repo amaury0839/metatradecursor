@@ -16,32 +16,40 @@ class GeminiClient:
     
     def __init__(self):
         self.config = get_config()
-        genai.configure(api_key=self.config.ai.gemini_api_key)
-        # Get model from config or use default
-        primary_model = getattr(self.config.ai, 'gemini_model', 'gemini-2-flash-exp')
-        fallback_models = [
-            primary_model,
-            'gemini-2-flash-exp',
-            'gemini-1.5-flash',
-            'gemini-pro'
-        ]
-        
-        # Try models in order
         self.model = None
-        for model_name in fallback_models:
-            try:
-                self.model = genai.GenerativeModel(model_name)
-                logger.info(f"Initialized with model: {model_name}")
-                break
-            except Exception as e:
-                logger.debug(f"Model {model_name} not available: {e}")
-                continue
-        
-        if self.model is None:
-            logger.warning("No valid Gemini model available, using fallback logic")
-            self.model = None  # Will trigger fallback in generate_content
-        
         self._prompt_cache: Dict[str, Dict[str, Any]] = {}  # hash -> response
+        
+        # Skip Gemini initialization if API key is not configured
+        if not self.config.ai.gemini_api_key:
+            logger.warning("GEMINI_API_KEY not configured - AI features disabled in cloud")
+            return
+            
+        try:
+            genai.configure(api_key=self.config.ai.gemini_api_key)
+            # Get model from config or use default
+            primary_model = getattr(self.config.ai, 'gemini_model', 'gemini-2-flash-exp')
+            fallback_models = [
+                primary_model,
+                'gemini-2-flash-exp',
+                'gemini-1.5-flash',
+                'gemini-pro'
+            ]
+            
+            # Try models in order
+            for model_name in fallback_models:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    logger.info(f"Initialized with model: {model_name}")
+                    break
+                except Exception as e:
+                    logger.debug(f"Model {model_name} not available: {e}")
+                    continue
+            
+            if self.model is None:
+                logger.warning("No valid Gemini model available, using fallback logic")
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini client: {e}")
+            self.model = None
     
     def generate_content(
         self, 

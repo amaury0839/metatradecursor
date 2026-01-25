@@ -7,11 +7,11 @@ import os
 
 
 class MT5Config(BaseSettings):
-    """MetaTrader 5 connection configuration"""
+    """MetaTrader 5 connection configuration - OPTIONAL for cloud deployment"""
     
-    login: int = Field(..., alias="MT5_LOGIN")
-    password: str = Field(..., alias="MT5_PASSWORD")
-    server: str = Field(..., alias="MT5_SERVER")
+    login: Optional[int] = Field(None, alias="MT5_LOGIN")
+    password: Optional[str] = Field(None, alias="MT5_PASSWORD")
+    server: Optional[str] = Field(None, alias="MT5_SERVER")
     path: Optional[str] = Field(None, alias="MT5_PATH")
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -46,9 +46,9 @@ class TradingConfig(BaseSettings):
 
 
 class AIConfig(BaseSettings):
-    """AI/Gemini configuration"""
+    """AI/Gemini configuration - OPTIONAL for cloud deployment"""
     
-    gemini_api_key: str = Field(..., alias="GEMINI_API_KEY")
+    gemini_api_key: Optional[str] = Field(None, alias="GEMINI_API_KEY")
     gemini_model: str = Field("gemini-2-flash-exp", alias="GEMINI_MODEL")
     min_confidence_threshold: float = 0.62
     max_retries: int = 3

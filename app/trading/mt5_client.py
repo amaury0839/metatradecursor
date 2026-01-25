@@ -48,6 +48,18 @@ class MT5Client:
         Returns:
             True if connection successful, False otherwise
         """
+        # Check if MT5 credentials are configured
+        if not self.config.mt5.login or not self.config.mt5.password or not self.config.mt5.server:
+            logger.warning("MT5 credentials not configured (cloud mode). Running in demo mode.")
+            self.connected = True  # Simulate connection for demo
+            self.account_info = {
+                'login': 0,
+                'balance': 10000.0,
+                'equity': 10000.0,
+                'server': 'Demo',
+            }
+            return True
+            
         if not MT5_AVAILABLE:
             logger.warning("MetaTrader5 package not available. Running in demo mode.")
             self.connected = True  # Simulate connection for demo
