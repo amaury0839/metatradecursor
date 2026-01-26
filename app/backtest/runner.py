@@ -2,11 +2,12 @@
 
 import pandas as pd
 import argparse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 from app.trading.strategy import TradingStrategy
 from app.backtest.metrics import calculate_metrics
 from app.core.logger import setup_logger
+from app.ai.onnx_model import load_onnx_classifier, OnnxClassifier
 
 logger = setup_logger("backtest")
 
@@ -14,8 +15,25 @@ logger = setup_logger("backtest")
 class BacktestRunner:
     """Runs backtest on historical OHLC data"""
     
-    def __init__(self):
+    def __init__(self, onnx_model_path: Optional[str] = None):
         self.strategy = TradingStrategy()
+        self.onnx: Optional[OnnxClassifier] = load_onnx_classifier(onnx_model_path) if onnx_model_path else None
+
+    def _onnx_signal(self, row) -> Optional[str]:
+        if not self.onnx:
+            return None
+        try:
+            features = [
+                float(row.get("close", 0.0)),
+                float(row.get("ema_fast", 0.0)),
+                float(row.get("ema_slow", 0.0)),
+                float(row.get("rsi", 0.0)),
+                float(row.get("atr", 0.0)),
+            ]
+            signal, _scores = self.onnx.predict(features)
+            return signal
+        except Exception:
+            return None
     
     def run_backtest(
         self,
@@ -57,7 +75,7 @@ class BacktestRunner:
             logger.error(f"Error loading data: {e}")
             return {"error": str(e)}
         
-        # Calculate indicators
+        # Calculate indicators (will pick swing profile by default here)
         df = self.strategy.calculate_indicators(df)
         
         # Simple backtest logic
@@ -69,12 +87,16 @@ class BacktestRunner:
             row = df.iloc[i]
             prev_row = df.iloc[i-1]
             
-            # Get signal
+            # Get signal (base from strategy + optional ONNX override)
             signal = "HOLD"
             if row["trend_bullish"] and prev_row["rsi"] < 50 and row["rsi"] >= 50:
                 signal = "BUY"
             elif row["trend_bearish"] and prev_row["rsi"] > 50 and row["rsi"] <= 50:
                 signal = "SELL"
+
+            onnx_signal = self._onnx_signal(row)
+            if onnx_signal:
+                signal = onnx_signal
             
             # Simple execution logic
             if signal == "BUY" and position is None:
@@ -171,10 +193,11 @@ def main():
     parser.add_argument("--data", required=True, help="Path to CSV file")
     parser.add_argument("--symbol", default="EURUSD", help="Symbol name")
     parser.add_argument("--equity", type=float, default=10000.0, help="Initial equity")
+    parser.add_argument("--onnx_model", help="Path to ONNX model for signal override", default=None)
     
     args = parser.parse_args()
     
-    runner = BacktestRunner()
+    runner = BacktestRunner(args.onnx_model)
     results = runner.run_backtest(args.data, args.symbol, args.equity)
     
     if "error" in results:
