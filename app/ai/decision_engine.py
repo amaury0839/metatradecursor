@@ -217,3 +217,15 @@ class DecisionEngine:
         except Exception as e:
             logger.error(f"Error in decision engine: {e}", exc_info=True)
             return None, None, str(e)
+
+
+# Global instance
+_decision_engine: Optional[DecisionEngine] = None
+
+
+def get_decision_engine() -> DecisionEngine:
+    """Get global decision engine instance"""
+    global _decision_engine
+    if _decision_engine is None:
+        _decision_engine = DecisionEngine()
+    return _decision_engine

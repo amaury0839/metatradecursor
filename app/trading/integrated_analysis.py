@@ -7,6 +7,7 @@ from app.news.sentiment import get_sentiment_analyzer
 from app.core.logger import setup_logger
 from app.core.config import get_config
 from app.trading.market_status import get_market_status
+from app.ai.smart_decision_router import make_smart_decision
 
 logger = setup_logger("integrated_analysis")
 
@@ -64,14 +65,21 @@ class IntegratedAnalyzer:
     def analyze_symbol(
         self,
         symbol: str,
-        timeframe: str = "M15"
+        timeframe: str = "M15",
+        use_enhanced_ai: bool = True
     ) -> Dict[str, Any]:
         """
         Perform integrated analysis on symbol
         
+        Args:
+            symbol: Trading symbol
+            timeframe: Chart timeframe
+            use_enhanced_ai: Use enhanced AI decision engine (default True)
+        
         Returns dict with keys:
         - technical: RSI, EMA, trend data
         - sentiment: news sentiment if available
+        - ai_decision: AI trading decision (if available)
         - combined_score: integrated score (-1 to +1)
         - signal: BUY/SELL/HOLD recommendation
         - confidence: Overall confidence level
@@ -81,6 +89,7 @@ class IntegratedAnalyzer:
             "timestamp": datetime.now().isoformat(),
             "technical": None,
             "sentiment": None,
+            "ai_decision": None,
             "combined_score": 0.0,
             "signal": "HOLD",
             "confidence": 0.0,
@@ -133,7 +142,34 @@ class IntegratedAnalyzer:
         except Exception as e:
             logger.warning(f"Sentiment analysis failed for {symbol}: {e}")
         
-        # 3. Calculate combined score
+        # 3. Get AI decision (enhanced or simple)
+        if use_enhanced_ai:
+            try:
+                ai_decision = make_smart_decision(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    technical_data=result["technical"],
+                    sentiment_data=result["sentiment"],
+                    use_enhanced=True
+                )
+                
+                if ai_decision:
+                    result["ai_decision"] = {
+                        "action": ai_decision.action,
+                        "confidence": ai_decision.confidence,
+                        "reasoning": ai_decision.reasoning,
+                        "stop_loss": ai_decision.stop_loss,
+                        "take_profit": ai_decision.take_profit
+                    }
+                    result["available_sources"].append("AI_ENHANCED")
+                    logger.info(
+                        f"{symbol} - AI Decision: {ai_decision.action} "
+                        f"(confidence={ai_decision.confidence:.2f})"
+                    )
+            except Exception as e:
+                logger.warning(f"AI decision failed for {symbol}: {e}")
+        
+        # 4. Calculate combined score
         combined_score = self._calculate_combined_score(result)
         result["combined_score"] = combined_score
         result["signal"], result["confidence"] = self._get_integrated_signal(
@@ -186,11 +222,21 @@ class IntegratedAnalyzer:
         combined_score: float
     ) -> tuple:
         """
-        Get signal and confidence from combined score
+        Get signal and confidence from combined score and AI decision
         
         Returns: (signal, confidence)
         """
-        # Use technical signal if available, else use combined score
+        # Priority 1: Use AI decision if available and confident
+        if analysis.get("ai_decision"):
+            ai_dec = analysis["ai_decision"]
+            if ai_dec["confidence"] >= 0.40:
+                logger.info(
+                    f"Using AI decision: {ai_dec['action']} "
+                    f"(confidence={ai_dec['confidence']:.2f})"
+                )
+                return ai_dec["action"], ai_dec["confidence"]
+        
+        # Priority 2: Use technical signal if available
         if analysis["technical"]:
             tech_signal = analysis["technical"]["signal"]
             # Adjust confidence based on sentiment agreement
@@ -239,6 +285,17 @@ class IntegratedAnalyzer:
                 summary += f"  Summary: {sent.get('summary', 'N/A')}\n"
                 if sent.get('headlines'):
                     summary += f"  Headlines: {len(sent['headlines'])} found\n"
+        
+        if analysis.get("ai_decision"):
+            ai = analysis["ai_decision"]
+            summary += f"\n🤖 AI DECISION:\n"
+            summary += f"  Action: {ai['action']}\n"
+            summary += f"  Confidence: {ai['confidence']:.1%}\n"
+            summary += f"  Reasoning: {ai['reasoning'][:150]}...\n"
+            if ai.get('stop_loss'):
+                summary += f"  Stop Loss: {ai['stop_loss']}\n"
+            if ai.get('take_profit'):
+                summary += f"  Take Profit: {ai['take_profit']}\n"
         
         summary += f"\n{'─'*50}\n"
         summary += f"📈 COMBINED ANALYSIS:\n"

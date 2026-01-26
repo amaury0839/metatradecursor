@@ -204,7 +204,13 @@ class RiskManager:
         max_volume = min(symbol_info.get('volume_max', 100.0), self.hard_max_volume_lots)
         volume_step = symbol_info.get('volume_step', 0.01)
         
-        lots = max(min_volume, min(max_volume, lots))
+        # If calculated volume is less than minimum, return 0 (trade not viable)
+        # This prevents forcing minimum volume which could be way too large for our capital
+        if lots < min_volume:
+            logger.info(f"Calculated volume {lots:.2f} < min_volume {min_volume}, trade not viable for {symbol}")
+            return 0.0
+        
+        lots = min(max_volume, lots)
         
         # Round to volume step
         lots = round(lots / volume_step) * volume_step
