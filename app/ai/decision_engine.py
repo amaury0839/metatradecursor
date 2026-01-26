@@ -247,6 +247,14 @@ class DecisionEngine:
                 risk_amount=risk_amount,
             )
 
+            if volume <= 0:
+                # No sizing possible -> force HOLD to avoid invalid orders
+                decision.action = "HOLD"
+                decision.risk_ok = False
+                decision.reasoning = "Sizing returned 0; holding to avoid invalid order."
+                decision.order = None
+                return decision
+
             from app.ai.schemas import OrderDetails
 
             decision.order = OrderDetails(
