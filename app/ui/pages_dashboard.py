@@ -71,7 +71,7 @@ def render_dashboard_local():
                 "PnL": f"${pos.get('profit', 0):.2f}",
             })
         
-        st.dataframe(position_data, use_container_width=True)
+        st.dataframe(position_data, width="stretch")
     else:
         st.info("No open positions")
     
@@ -94,7 +94,7 @@ def render_dashboard_local():
                 "Executed": "✅" if dec.get('execution_success') else "❌",
             })
         
-        st.dataframe(decision_data, use_container_width=True)
+        st.dataframe(decision_data, width="stretch")
     else:
         st.info("No decisions yet")
     
@@ -121,7 +121,7 @@ def render_dashboard_local():
             yaxis_title="PnL ($)",
             height=400
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("No PnL data available")
 
@@ -173,7 +173,7 @@ def render_dashboard_remote(api_client):
                 "PnL": f"${pos.get('profit', 0):.2f}",
             })
         
-        st.dataframe(position_data, use_container_width=True)
+        st.dataframe(position_data, width="stretch")
     else:
         st.info("No open positions")
     
@@ -195,7 +195,7 @@ def render_dashboard_remote(api_client):
                 "Executed": "✅" if dec.get('execution_success') else "❌",
             })
         
-        st.dataframe(decision_data, use_container_width=True)
+        st.dataframe(decision_data, width="stretch")
     else:
         st.info("No decisions yet")
     
@@ -229,7 +229,7 @@ def render_dashboard_remote(api_client):
                 yaxis_title="PnL ($)",
                 height=400
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("No PnL data available")
     else:

@@ -3,6 +3,8 @@
 import streamlit as st
 import sys
 from pathlib import Path
+from datetime import datetime
+import MetaTrader5 as mt5
 
 # Add app to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -12,6 +14,7 @@ from app.core.state import get_state_manager
 from app.core.scheduler import TradingScheduler
 from app.core.logger import setup_logger
 from app.core.analysis_logger import get_analysis_logger
+from app.core.database import get_database_manager
 from app.trading.mt5_client import get_mt5_client
 from app.trading.integrated_analysis import get_integrated_analyzer
 from app.trading.market_status import get_market_status
@@ -171,6 +174,18 @@ def main_trading_loop():
                             status="SUCCESS",
                             details={"profit": pos_profit}
                         )
+                        
+                        # Update trade in database
+                        try:
+                            db = get_database_manager()
+                            db.update_trade(pos_ticket, {
+                                'close_price': mt5.symbol_info_tick(pos_symbol).ask if pos_type == 0 else mt5.symbol_info_tick(pos_symbol).bid,
+                                'close_timestamp': datetime.now().isoformat(),
+                                'profit': pos_profit,
+                                'status': 'closed'
+                            })
+                        except Exception as db_error:
+                            logger.error(f"Error updating trade in database: {db_error}")
                     else:
                         logger.error(f"❌ Error cerrando posición {pos_ticket}: {error}")
                         analysis_logger.log_execution(
@@ -230,50 +245,45 @@ def main_trading_loop():
                     symbol, timeframe, signal, analysis["technical"]["data"] if analysis["technical"] else {}
                 )
                 
-                # Si la IA falla, usar señal técnica/combinada directamente
+                # Si la IA falla, bloquea nuevas entradas y devuelve HOLD neutral
                 if decision_error or not decision:
                     analysis_logger.log_ai_analysis(
                         symbol=symbol,
                         timeframe=timeframe,
-                        decision=signal,
+                        decision="HOLD",
                         status="WARNING",
-                        reasoning=f"IA no disponible, usando análisis integrado: {signal} (sources: {', '.join(analysis['available_sources'])})"
+                        reasoning=(
+                            "IA no disponible/bloqueada, se fuerza HOLD. "
+                            f"Sources: {', '.join(analysis['available_sources'])}"
+                        ),
                     )
-                    logger.warning(f"AI unavailable for {symbol}, using integrated signal: {signal}")
-                    
-                    # Crear decisión desde análisis integrado
-                    confidence = analysis["confidence"]
+                    logger.warning(f"AI unavailable for {symbol}, forcing HOLD and skipping trade")
+
                     decision = TradingDecision(
-                        action=signal,
-                        confidence=confidence,
+                        action="HOLD",
+                        confidence=0.0,
                         symbol=symbol,
                         timeframe=timeframe,
-                        reason=[
-                            f"Señal combinada: {signal}",
-                            f"Fuentes: {', '.join(analysis['available_sources'])}",
-                            f"Score: {analysis['combined_score']:.2f}"
-                        ],
-                        risk_ok=True,
-                        order=OrderDetails(
-                            type="MARKET",
-                            volume_lots=0.01,
-                            sl_price=None,
-                            tp_price=None
-                        ) if signal in ["BUY", "SELL"] else None
+                        reason=["AI layer unavailable or blocked"],
+                        reasoning="AI failed; holding to avoid trading sin confirmación.",
+                        risk_ok=False,
+                        market_bias="neutral",
+                        sources=["technical", "sentiment"],
                     )
                     prompt_hash = None
                 else:
                     # Log AI decision
                     confidence = decision.confidence if hasattr(decision, 'confidence') else None
+                    reasoning = getattr(decision, 'reasoning', None) or '. '.join(getattr(decision, 'reason', []))
                     analysis_logger.log_ai_analysis(
                         symbol=symbol,
                         timeframe=timeframe,
                         decision=decision.action,
                         confidence=confidence,
-                        reasoning=f"Análisis integrado ({', '.join(analysis['available_sources'])}): {decision.reasoning if hasattr(decision, 'reasoning') else ''}"
+                        reasoning=f"Análisis integrado ({', '.join(analysis['available_sources'])}): {reasoning}"
                     )
                 
-                # Check if decision is actionable
+                # Check if decision is actionable (y respeta riesgo AI)
                 if decision.action == "HOLD" or not decision.is_valid_for_execution():
                     continue
                 
@@ -363,6 +373,26 @@ def main_trading_loop():
                                 "order_result": str(order_result)
                             }
                         )
+                        
+                        # Save trade to database
+                        try:
+                            db = get_database_manager()
+                            if order_result and isinstance(order_result, dict):
+                                ticket = order_result.get('order', 0)
+                                if ticket:
+                                    db.save_trade({
+                                        'ticket': ticket,
+                                        'symbol': symbol,
+                                        'trade_type': decision.action,
+                                        'volume': volume,
+                                        'open_price': entry_price,
+                                        'stop_loss': sl_price,
+                                        'take_profit': tp_price,
+                                        'status': 'open',
+                                        'comment': f"Confidence: {decision.confidence:.2f}"
+                                    })
+                        except Exception as db_error:
+                            logger.error(f"Error saving trade to database: {db_error}")
                     else:
                         # Incluir detalles del error en el mensaje principal
                         error_msg = f"Execution: {decision.action} {volume} lots - ERROR: {exec_error}"

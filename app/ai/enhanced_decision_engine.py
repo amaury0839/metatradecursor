@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from app.core.logger import setup_logger
 from app.core.config import get_config
 from app.ai.gemini_client import get_gemini_client
-from app.ai.schemas import TradingDecision
+from app.ai.schemas import TradingDecision, neutral_decision
 from app.trading.portfolio import get_portfolio_manager
 from app.trading.risk import get_risk_manager
 from app.news.sentiment import get_sentiment_analyzer
@@ -199,17 +199,26 @@ Be AGGRESSIVE when multiple sources align. Take calculated risks."""
             
             if not response:
                 logger.error("No response from Gemini API")
-                return None
+                return neutral_decision(symbol, timeframe)
             
             # Response is already parsed as Dict
             decision_data = response
             if not decision_data:
-                return None
+                return neutral_decision(symbol, timeframe)
             
             # Add required fields that Gemini doesn't provide
             decision_data['symbol'] = symbol
             decision_data['timeframe'] = timeframe
-            decision_data['risk_ok'] = True  # Will be validated later
+            decision_data['risk_ok'] = decision_data.get('risk_ok', True)  # Will be validated later
+            
+            # Ensure reasoning exists (convert from reason list if needed)
+            if 'reasoning' not in decision_data or not decision_data['reasoning']:
+                reasons = decision_data.get('reason', [])
+                decision_data['reasoning'] = '. '.join(reasons) if reasons else "No specific reasoning provided"
+            
+            # Ensure other defaults exist
+            decision_data.setdefault('market_bias', 'neutral')
+            decision_data.setdefault('sources', [])
             
             # Create TradingDecision object
             decision = TradingDecision(**decision_data)
@@ -228,7 +237,7 @@ Be AGGRESSIVE when multiple sources align. Take calculated risks."""
             
         except Exception as e:
             logger.error(f"Error in enhanced decision for {symbol}: {e}", exc_info=True)
-            return None
+            return neutral_decision(symbol, timeframe)
     
     def _build_enhanced_prompt(self, data: Dict) -> str:
         """Build comprehensive prompt with all aggregated data"""

@@ -2,13 +2,19 @@
 
 from typing import Optional, Dict
 from app.core.logger import setup_logger
-from app.ai.schemas import TradingDecision
+from app.ai.schemas import TradingDecision, neutral_decision
+from app.core.database import get_database_manager
 
 # Import both engines
 from app.ai.decision_engine import get_decision_engine
 from app.ai.enhanced_decision_engine import get_enhanced_decision_engine
 
 logger = setup_logger("ai_router")
+
+
+def should_call_gemini(technical_signal: str) -> bool:
+    """Only call Gemini when the technical layer is inconclusive (HOLD)."""
+    return technical_signal == "HOLD"
 
 
 def make_smart_decision(
@@ -33,6 +39,16 @@ def make_smart_decision(
         TradingDecision or None
     """
     
+    db = get_database_manager()
+    tech_signal = technical_data.get('signal', 'HOLD') if technical_data else 'HOLD'
+
+    # Skip Gemini completely when the technical layer already has a clear signal
+    if not should_call_gemini(tech_signal):
+        logger.info(
+            f"Skipping AI for {symbol} {timeframe}: technical signal={tech_signal}"
+        )
+        return None
+    
     # Try enhanced engine first if enabled
     if use_enhanced:
         try:
@@ -51,6 +67,15 @@ def make_smart_decision(
                     f"✓ Enhanced decision succeeded: {decision.action} "
                     f"with confidence {decision.confidence:.2f}"
                 )
+                
+                # Save to database
+                try:
+                    data_sources = technical_data.get('available_sources', []) if technical_data else []
+                    db.save_ai_decision(symbol, timeframe, decision, 
+                                       engine_type='enhanced', data_sources=data_sources)
+                except Exception as e:
+                    logger.warning(f"Failed to save enhanced decision to DB: {e}")
+                
                 return decision
             else:
                 logger.warning("Enhanced decision returned None, falling back to simple")
@@ -79,8 +104,17 @@ def make_smart_decision(
                 f"✓ Simple decision succeeded: {decision.action} "
                 f"with confidence {decision.confidence:.2f}"
             )
+            
+            # Save to database
+            try:
+                data_sources = technical_data.get('available_sources', []) if technical_data else []
+                db.save_ai_decision(symbol, timeframe, decision, 
+                                   engine_type='simple', data_sources=data_sources)
+            except Exception as e:
+                logger.warning(f"Failed to save simple decision to DB: {e}")
         else:
             logger.warning(f"Simple decision also returned None: {error}")
+            return neutral_decision(symbol, timeframe)
         
         return decision
         

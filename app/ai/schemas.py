@@ -31,15 +31,19 @@ class ConstraintsUsed(BaseModel):
 
 
 class TradingDecision(BaseModel):
-    """AI trading decision schema"""
+    """AI trading decision schema - Enterprise pattern with safe defaults"""
     action: Literal["BUY", "SELL", "HOLD", "CLOSE"] = Field(...)
     confidence: float = Field(..., ge=0.0, le=1.0)
     symbol: str = Field(...)
     timeframe: str = Field(...)
     reason: List[str] = Field(default_factory=list)
-    risk_ok: bool = Field(...)
+    reasoning: str = Field(default="")  # String version for DB/logs
+    market_bias: str = Field(default="neutral")
+    probability_up: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    risk_ok: bool = Field(default=True)
     order: Optional[OrderDetails] = None
     constraints_used: Optional[ConstraintsUsed] = None
+    sources: List[str] = Field(default_factory=list)  # Data sources used
     
     @field_validator("confidence")
     @classmethod
@@ -78,3 +82,22 @@ class TradingDecision(BaseModel):
                 return False
         
         return True
+
+
+def neutral_decision(symbol: str, timeframe: str) -> "TradingDecision":
+    """Factory for a schema-compliant neutral HOLD decision.
+
+    Ensures all required fields are present to avoid validation errors
+    when the AI layer is unavailable or blocked.
+    """
+    return TradingDecision(
+        symbol=symbol,
+        timeframe=timeframe,
+        action="HOLD",
+        confidence=0.0,
+        reasoning="Neutral fallback. AI unavailable or blocked.",
+        market_bias="neutral",
+        probability_up=0.5,
+        risk_ok=False,
+        sources=[],
+    )

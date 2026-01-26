@@ -147,36 +147,36 @@ with st.sidebar:
     st.subheader("Quick actions")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Connect MT5", use_container_width=True):
+        if st.button("Connect MT5", width="stretch"):
             ok, msg = api_post("/connection/connect")
             st.success("Connected") if ok else st.error(f"Connect failed: {msg}")
     with col2:
-        if st.button("Disconnect", use_container_width=True):
+        if st.button("Disconnect", width="stretch"):
             ok, msg = api_post("/connection/disconnect")
             st.success("Disconnected") if ok else st.error(f"Disconnect failed: {msg}")
 
     col3, col4 = st.columns(2)
     with col3:
-        if st.button("Start scheduler", use_container_width=True):
+        if st.button("Start scheduler", width="stretch"):
             ok, msg = api_post("/control/scheduler/start")
             st.success("Scheduler started") if ok else st.error(f"Start failed: {msg}")
     with col4:
-        if st.button("Stop scheduler", use_container_width=True):
+        if st.button("Stop scheduler", width="stretch"):
             ok, msg = api_post("/control/scheduler/stop")
             st.success("Scheduler stopped") if ok else st.error(f"Stop failed: {msg}")
 
     col5, col6 = st.columns(2)
     with col5:
-        if st.button("Kill switch on", use_container_width=True):
+        if st.button("Kill switch on", width="stretch"):
             ok, msg = api_post("/control/kill-switch/activate")
             st.success("Kill switch active") if ok else st.error(f"Failed: {msg}")
     with col6:
-        if st.button("Kill switch off", use_container_width=True):
+        if st.button("Kill switch off", width="stretch"):
             ok, msg = api_post("/control/kill-switch/deactivate")
             st.success("Kill switch disabled") if ok else st.error(f"Failed: {msg}")
 
     st.divider()
-    if st.button("Refresh", use_container_width=True):
+    if st.button("Refresh", width="stretch"):
         st.rerun()
 
 
@@ -270,7 +270,7 @@ if page == "Dashboard":
     st.subheader("Open positions")
     positions_data, pos_error = api_get("/positions")
     if positions_data and positions_data.get("positions"):
-        st.dataframe(positions_data["positions"], use_container_width=True)
+        st.dataframe(positions_data["positions"], width="stretch")
     else:
         st.info("No open positions") if not pos_error else st.warning(f"Positions error: {pos_error}")
 
@@ -278,7 +278,7 @@ if page == "Dashboard":
     st.subheader("Recent decisions")
     decisions_data, dec_error = api_get("/decisions")
     if decisions_data and decisions_data.get("decisions"):
-        st.dataframe(normalize_decisions(decisions_data["decisions"])[-10:], use_container_width=True)
+        st.dataframe(normalize_decisions(decisions_data["decisions"])[-10:], width="stretch")
     else:
         st.info("No decisions yet") if not dec_error else st.warning(f"Decisions error: {dec_error}")
 
@@ -286,7 +286,7 @@ if page == "Dashboard":
     st.subheader("Recent trades")
     trades_data, trade_list_error = api_get("/trades")
     if trades_data and trades_data.get("trades"):
-        st.dataframe(normalize_trades(trades_data["trades"])[-10:], use_container_width=True)
+        st.dataframe(normalize_trades(trades_data["trades"])[-10:], width="stretch")
     else:
         st.info("No trades yet") if not trade_list_error else st.warning(f"Trades error: {trade_list_error}")
 
@@ -511,7 +511,7 @@ elif page == "AI Assistant":
 
     st.subheader("Decision explorer")
     if recent_decisions:
-        st.dataframe(normalize_decisions(recent_decisions)[-10:], use_container_width=True)
+        st.dataframe(normalize_decisions(recent_decisions)[-10:], width="stretch")
     else:
         st.info("No decisions yet" if not dec_error else f"Decisions error: {dec_error}")
 
@@ -588,7 +588,7 @@ elif page == "Logs":
         st.subheader("Order log")
         trades_data, trade_list_error = api_get("/trades")
         if trades_data and trades_data.get("trades"):
-            st.dataframe(normalize_trades(trades_data["trades"])[-100:], use_container_width=True)
+            st.dataframe(normalize_trades(trades_data["trades"])[-100:], width="stretch")
         else:
             st.info("No trades yet" if not trade_list_error else f"Trades error: {trade_list_error}")
 
@@ -600,7 +600,7 @@ elif page == "Logs":
             only_actionable = st.checkbox("Only BUY/SELL reviews", value=False)
             if only_actionable:
                 decisions = [d for d in decisions if d.get("action") in {"BUY", "SELL"}]
-            st.dataframe(decisions[-100:], use_container_width=True)
+            st.dataframe(decisions[-100:], width="stretch")
         else:
             st.info("No reviews yet" if not dec_error else f"Decisions error: {dec_error}")
 

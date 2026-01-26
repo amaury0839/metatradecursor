@@ -1,6 +1,7 @@
-"""Google Gemini API client"""
+"""Google Gemini API client with safety fallback"""
 
 import json
+import re
 import hashlib
 from typing import Optional, Dict, Any
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -9,6 +10,57 @@ from app.core.config import get_config
 from app.core.logger import setup_logger
 
 logger = setup_logger("gemini_client")
+
+
+def safe_parse_gemini_json(text: str) -> Optional[Dict[str, Any]]:
+    """Extract and parse the first JSON object from text; tolerant to truncation."""
+    if not text:
+        return None
+
+    match = re.search(r"\{[\s\S]*\}", text)
+    if not match:
+        return None
+
+    json_text = match.group(0)
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError:
+        return None
+
+
+def safe_gemini_text(response) -> Optional[str]:
+    """Extract text from Gemini response with safety checks.
+    
+    Returns None if response is blocked by safety filters.
+    This prevents crashes when Gemini refuses to respond.
+    """
+    try:
+        if not response:
+            return None
+        
+        # Check if blocked by safety filters
+        if hasattr(response, 'prompt_feedback'):
+            if response.prompt_feedback.block_reason:
+                logger.warning(f"Gemini blocked by safety: {response.prompt_feedback.block_reason}")
+                return None
+        
+        # Try to get text
+        if hasattr(response, 'text'):
+            return response.text.strip()
+        
+        # Check candidates
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                if candidate.content.parts:
+                    return candidate.content.parts[0].text.strip()
+        
+        logger.warning("Could not extract text from Gemini response")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error extracting Gemini text: {e}")
+        return None
 
 
 class GeminiClient:
@@ -81,8 +133,21 @@ class GeminiClient:
             return self._prompt_cache[prompt_hash]
         
         try:
-            # Combine prompts
-            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+            # Contract: force strict JSON or explicit unavailable sentinel
+            contract = (
+                "Devuelve EXCLUSIVAMENTE un JSON VÁLIDO. "
+                "No incluyas texto fuera del JSON, ni markdown, ni comentarios. "
+                "Si no puedes generar el JSON completo, devuelve exactamente {\"status\":\"unavailable\"}. "
+                "Schema esperado: {\n"
+                "  \"action\": \"HOLD\",\n"
+                "  \"confidence\": 0.0,\n"
+                "  \"market_bias\": \"neutral\",\n"
+                "  \"summary\": \"string\"\n"
+                "}"
+            )
+
+            # Combine prompts under contract
+            full_prompt = f"{contract}\n\n{system_prompt}\n\n{user_prompt}"
             
             # Generate response
             if self.model is None:
@@ -92,41 +157,49 @@ class GeminiClient:
             response = self.model.generate_content(
                 full_prompt,
                 generation_config={
-                    "temperature": 0.3,  # Lower temperature for more consistent outputs
+                    "temperature": 0.2,  # Low temp = more deterministic, less blocks
                     "top_p": 0.95,
                     "top_k": 40,
-                    "max_output_tokens": 1024,
+                    "max_output_tokens": 512,  # Reduced for faster, safer responses
                 }
             )
             
-            # Parse response
-            response_text = response.text.strip()
+            # Parse response with safety check
+            response_text = safe_gemini_text(response)
             
-            # Try to extract JSON from response (might be wrapped in markdown)
-            if "```json" in response_text:
-                start = response_text.find("```json") + 7
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            elif "```" in response_text:
-                start = response_text.find("```") + 3
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
+            # Fallback if blocked
+            if response_text is None:
+                logger.warning("Gemini response blocked or empty - using neutral fallback")
+                return {
+                    "action": "HOLD",
+                    "confidence": 0.0,
+                    "reason": ["Market analysis unavailable due to API restrictions"],
+                    "reasoning": "Market analysis unavailable due to API restrictions. Gemini safety filter activated.",
+                    "market_bias": "neutral",
+                    "probability_up": 0.5,
+                    "risk_ok": False,
+                    "sources": []
+                }
             
-            # Parse JSON
-            try:
-                result = json.loads(response_text)
-                
-                # Cache result
-                if use_cache:
-                    self._prompt_cache[prompt_hash] = result
-                
-                logger.debug("Gemini response parsed successfully")
-                return result
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse Gemini JSON response: {e}")
-                logger.error(f"Response text: {response_text[:500]}")
-                return None
+            # Try to extract JSON robustly
+            result = safe_parse_gemini_json(response_text)
+            if not result or result.get("status") == "unavailable":
+                logger.warning("Gemini JSON invalid or unavailable")
+                return {
+                    "action": "HOLD",
+                    "confidence": 0.0,
+                    "reasoning": "Gemini unavailable or returned invalid JSON.",
+                    "market_bias": "neutral",
+                    "probability_up": 0.5,
+                    "risk_ok": False,
+                    "sources": [],
+                }
+
+            if use_cache:
+                self._prompt_cache[prompt_hash] = result
+
+            logger.debug("Gemini response parsed successfully")
+            return result
                 
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}", exc_info=True)

@@ -116,6 +116,16 @@ class ExecutionManager:
                 price = mt5.symbol_info_tick(symbol).bid
             else:
                 return False, None, f"Invalid order type: {order_type}"
+
+            # Enforce broker minimum stop distances to avoid retcode 10016
+            sl_price, tp_price = self._enforce_min_stop_distance(
+                symbol=symbol,
+                order_type=order_type,
+                entry_price=price,
+                sl_price=sl_price,
+                tp_price=tp_price,
+                symbol_info=symbol_info,
+            )
             
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -166,6 +176,42 @@ class ExecutionManager:
         except Exception as e:
             logger.error(f"Error placing order: {e}", exc_info=True)
             return False, None, str(e)
+
+    def _enforce_min_stop_distance(
+        self,
+        symbol: str,
+        order_type: str,
+        entry_price: float,
+        sl_price: Optional[float],
+        tp_price: Optional[float],
+        symbol_info: Dict
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """Adjust SL/TP to satisfy broker stop level constraints and avoid retcode 10016."""
+        try:
+            point = symbol_info.get('point', 0.0001)
+            min_points = symbol_info.get('trade_stops_level', symbol_info.get('stops_level', 0)) or 0
+            min_dist = min_points * point
+            if min_dist <= 0:
+                return sl_price, tp_price
+
+            is_buy = order_type.upper() == "BUY"
+
+            if sl_price:
+                dist = (entry_price - sl_price) if is_buy else (sl_price - entry_price)
+                if dist < min_dist:
+                    sl_price = entry_price - min_dist if is_buy else entry_price + min_dist
+                    logger.info(f"Adjusted SL for {symbol} to respect min stop distance ({min_dist})")
+
+            if tp_price:
+                dist = (tp_price - entry_price) if is_buy else (entry_price - tp_price)
+                if dist < min_dist:
+                    tp_price = entry_price + min_dist if is_buy else entry_price - min_dist
+                    logger.info(f"Adjusted TP for {symbol} to respect min stop distance ({min_dist})")
+
+            return sl_price, tp_price
+        except Exception as e:
+            logger.warning(f"Failed enforcing stop distance for {symbol}: {e}")
+            return sl_price, tp_price
     
     def close_position(self, ticket: int, volume: Optional[float] = None) -> Tuple[bool, Optional[str]]:
         """

@@ -260,7 +260,7 @@ def render_dashboard():
             })
         
         df_positions = pd.DataFrame(positions_data)
-        st.dataframe(df_positions, use_container_width=True)
+        st.dataframe(df_positions, width="stretch")
     else:
         st.info("💤 No open positions")
     
@@ -273,13 +273,13 @@ def render_dashboard():
     with col1:
         if scheduler and scheduler.is_running():
             st.success("🟢 Loop Running")
-            if st.button("⏸ Stop Loop", use_container_width=True):
+            if st.button("⏸ Stop Loop", width="stretch"):
                 scheduler.stop()
                 st.session_state.scheduler = None
                 st.rerun()
         else:
             st.warning("⚪ Loop Stopped")
-            if st.button("▶ Start Loop", use_container_width=True):
+            if st.button("▶ Start Loop", width="stretch"):
                 try:
                     from app.main import main_trading_loop
                     scheduler = TradingScheduler(main_trading_loop)
@@ -467,117 +467,295 @@ def render_configuration():
             st.slider("Update Interval (sec)", 5, 300, 30, key="interval_select")
         
         st.warning("⚠️ Kill Switch (Emergency Stop)")
-        if st.button("🛑 ACTIVATE KILL SWITCH", type="primary", use_container_width=True):
+        if st.button("🛑 ACTIVATE KILL SWITCH", type="primary", width="stretch"):
             st.error("KILL SWITCH ACTIVATED - All trading stopped!")
     
     st.divider()
-    if st.button("💾 Save Configuration", type="primary", use_container_width=True):
+    if st.button("💾 Save Configuration", type="primary", width="stretch"):
         st.success("✅ Configuration saved!")
 
 
 def render_logs():
-    """Logs and audit trail"""
-    st.subheader("📋 Logs & Analysis")
+    """Logs and audit trail from database"""
+    st.subheader("📋 Logs, Analysis & Audit Trail")
     
-    tab1, tab2, tab3 = st.tabs(["Live Analysis", "Trade History", "System Logs"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Database Logs", "📈 Trade History", "🔍 Analysis Logs", "⚙️ System Info"])
     
     with tab1:
-        st.info("📊 Live analysis logs from trading bot")
+        st.header("Database Analysis & Audit Trail")
+        
+        try:
+            from app.core.database import get_database_manager
+            import pandas as pd
+            
+            db = get_database_manager()
+            
+            # Filter options
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                log_type = st.selectbox(
+                    "Log Type",
+                    ["Analysis", "Decisions", "Trades", "All"],
+                    key="log_type"
+                )
+            
+            with col2:
+                days = st.slider("Last X Days", 1, 30, 7, key="log_days")
+            
+            with col3:
+                limit = st.number_input("Max Records", 10, 500, 100, key="log_limit")
+            
+            # Display based on type
+            if log_type in ["Analysis", "All"]:
+                st.subheader("📊 Analysis History")
+                
+                analysis = db.get_analysis_history(days=days)
+                if analysis and len(analysis) > 0:
+                    df = pd.DataFrame(analysis[:limit])
+                    
+                    # Display metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Analysis", len(analysis))
+                    with col2:
+                        avg_confidence = df['confidence'].mean() if 'confidence' in df.columns else 0
+                        st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
+                    with col3:
+                        avg_rsi = df['tech_rsi'].mean() if 'tech_rsi' in df.columns else 0
+                        st.metric("Avg RSI", f"{avg_rsi:.1f}")
+                    with col4:
+                        symbols = df['symbol'].nunique() if 'symbol' in df.columns else 0
+                        st.metric("Symbols Analyzed", symbols)
+                    
+                    st.divider()
+                    
+                    # Display table
+                    cols_to_show = ['timestamp', 'symbol', 'tech_signal', 'tech_rsi', 'sentiment_score', 
+                                   'combined_score', 'final_signal', 'confidence']
+                    available_cols = [col for col in cols_to_show if col in df.columns]
+                    
+                    st.dataframe(
+                        df[available_cols].sort_values('timestamp', ascending=False),
+                        width="stretch",
+                        height=400
+                    )
+                else:
+                    st.info("No analysis records found")
+            
+            if log_type in ["Decisions", "All"]:
+                st.subheader("🤖 AI Decisions Log")
+                
+                decisions = db.get_ai_decisions(days=days)
+                if decisions and len(decisions) > 0:
+                    df = pd.DataFrame(decisions[:limit])
+                    
+                    # Display metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Decisions", len(decisions))
+                    with col2:
+                        enhanced = len([d for d in decisions if d.get('engine_type') == 'enhanced'])
+                        st.metric("Enhanced AI", enhanced)
+                    with col3:
+                        simple = len([d for d in decisions if d.get('engine_type') == 'simple'])
+                        st.metric("Simple AI", simple)
+                    with col4:
+                        avg_conf = df['confidence'].mean() if 'confidence' in df.columns else 0
+                        st.metric("Avg Confidence", f"{avg_conf:.1f}%")
+                    
+                    st.divider()
+                    
+                    # Display table
+                    cols_to_show = ['timestamp', 'symbol', 'action', 'confidence', 'engine_type', 
+                                   'reasoning', 'executed']
+                    available_cols = [col for col in cols_to_show if col in df.columns]
+                    
+                    st.dataframe(
+                        df[available_cols].sort_values('timestamp', ascending=False),
+                        width="stretch",
+                        height=400
+                    )
+                else:
+                    st.info("No decision records found")
+            
+            if log_type in ["Trades", "All"]:
+                st.subheader("💰 Trades Log")
+                
+                trades = db.get_trades(days=days)
+                if trades and len(trades) > 0:
+                    df = pd.DataFrame(trades[:limit])
+                    
+                    # Display metrics
+                    open_trades = len([t for t in trades if t.get('status') == 'open'])
+                    closed_trades = len([t for t in trades if t.get('status') == 'closed'])
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Trades", len(trades))
+                    with col2:
+                        st.metric("Open", open_trades)
+                    with col3:
+                        st.metric("Closed", closed_trades)
+                    with col4:
+                        total_pnl = df['profit'].sum() if 'profit' in df.columns else 0
+                        st.metric("Total P&L", f"${total_pnl:.2f}")
+                    
+                    st.divider()
+                    
+                    # Display table
+                    cols_to_show = ['timestamp', 'ticket', 'symbol', 'type', 'volume', 
+                                   'open_price', 'close_price', 'profit', 'status']
+                    available_cols = [col for col in cols_to_show if col in df.columns]
+                    
+                    # Rename timestamp columns
+                    display_df = df[available_cols].copy()
+                    if 'timestamp' in display_df.columns:
+                        display_df = display_df.rename(columns={'timestamp': 'open_time'})
+                    
+                    st.dataframe(
+                        display_df.sort_values('open_time' if 'open_time' in display_df.columns else available_cols[0], 
+                                              ascending=False),
+                        width="stretch",
+                        height=400
+                    )
+                else:
+                    st.info("No trade records found")
+                    
+        except Exception as e:
+            st.error(f"Error loading database logs: {e}")
+            logger.error(f"Database logs error: {e}", exc_info=True)
+    
+    with tab2:
+        st.header("📈 Trade History (Last 7 Days)")
+        
+        try:
+            from app.trading.mt5_client import get_mt5_client
+            from datetime import timedelta
+            import pandas as pd
+            
+            mt5 = get_mt5_client()
+            if mt5.is_connected():
+                from_date = datetime.now() - timedelta(days=7)
+                deals = mt5.get_history_deals(from_date)
+                
+                if deals:
+                    # Filter out balance operations
+                    trade_deals = [d for d in deals if d.get('entry', 0) in [0, 1]]
+                    
+                    if trade_deals:
+                        # Calculate statistics
+                        total_trades = len(trade_deals)
+                        winning_trades = len([d for d in trade_deals if d.get('profit', 0) > 0])
+                        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+                        total_profit = sum(d.get('profit', 0) for d in trade_deals)
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Deals", total_trades)
+                        with col2:
+                            st.metric("Winning", winning_trades)
+                        with col3:
+                            st.metric("Win Rate", f"{win_rate:.1f}%")
+                        with col4:
+                            pnl_delta = "Profit" if total_profit > 0 else "Loss"
+                            st.metric("Total P&L", f"${total_profit:.2f}", delta=pnl_delta)
+                        
+                        st.divider()
+                        
+                        # Show deals table
+                        history_data = []
+                        for deal in trade_deals[-50:]:  # Last 50
+                            deal_type = "BUY" if deal.get('type', 0) == 0 else "SELL"
+                            entry_type = "IN" if deal.get('entry', 0) == 0 else "OUT"
+                            history_data.append({
+                                "Time": datetime.fromtimestamp(deal.get('time', 0)).strftime("%Y-%m-%d %H:%M:%S"),
+                                "Ticket": deal.get('ticket', 'N/A'),
+                                "Symbol": deal.get('symbol', 'N/A'),
+                                "Type": deal_type,
+                                "Entry": entry_type,
+                                "Volume": f"{deal.get('volume', 0.0):.2f}",
+                                "Price": f"{deal.get('price', 0.0):.5f}",
+                                "P&L": f"${deal.get('profit', 0.0):.2f}",
+                                "Commission": f"${deal.get('commission', 0.0):.2f}",
+                                "Swap": f"${deal.get('swap', 0.0):.2f}"
+                            })
+                        
+                        if history_data:
+                            df_history = pd.DataFrame(history_data)
+                            st.dataframe(df_history, width="stretch", height=400)
+                    else:
+                        st.warning("No trade deals found in the last 7 days")
+                else:
+                    st.warning("No deal history found in the last 7 days")
+            else:
+                st.error("❌ MT5 not connected - cannot retrieve trade history")
+                
+        except Exception as e:
+            st.error(f"Error loading trade history: {e}")
+            logger.error(f"Trade history error: {e}", exc_info=True)
+    
+    with tab3:
+        st.header("🔍 Analysis Log")
+        
         try:
             from app.ui.pages_analysis import render_analysis_logs
             render_analysis_logs()
         except Exception as e:
-            st.warning(f"Could not load analysis: {e}")
+            st.warning(f"Could not load analysis logs: {e}")
+            logger.error(f"Analysis logs error: {e}", exc_info=True)
     
-    with tab2:
-        st.info("📈 Trade execution history (last 7 days)")
+    with tab4:
+        st.header("⚙️ System Information & Status")
         
-        # Get historical deals
-        from app.trading.mt5_client import get_mt5_client
-        from datetime import timedelta
-        import pandas as pd
-        
-        mt5 = get_mt5_client()
-        if mt5.is_connected():
-            from_date = datetime.now() - timedelta(days=7)
-            deals = mt5.get_history_deals(from_date)
+        try:
+            from app.core.database import get_database_manager
+            import os
             
-            if deals:
-                # Filter out balance operations (entry=2 means in/out deal)
-                trade_deals = [d for d in deals if d.get('entry', 0) in [0, 1]]
-                
-                # Calculate statistics
-                total_trades = len(trade_deals)
-                winning_trades = len([d for d in trade_deals if d.get('profit', 0) > 0])
-                win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-                total_profit = sum(d.get('profit', 0) for d in trade_deals)
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Trades", total_trades)
-                with col2:
-                    st.metric("Winning", winning_trades)
-                with col3:
-                    st.metric("Win Rate", f"{win_rate:.1f}%")
-                with col4:
-                    pnl_delta = "Profit" if total_profit > 0 else "Loss"
-                    st.metric("Total P&L", f"${total_profit:.2f}", delta=pnl_delta)
-                
-                st.divider()
-                
-                # Show deals table
-                history_data = []
-                for deal in trade_deals[-50:]:  # Last 50 trades
-                    deal_type = "BUY" if deal.get('type', 0) == 0 else "SELL"
-                    entry_type = "IN" if deal.get('entry', 0) == 0 else "OUT"
-                    history_data.append({
-                        "Time": datetime.fromtimestamp(deal.get('time', 0)).strftime("%Y-%m-%d %H:%M:%S"),
-                        "Ticket": deal.get('ticket', 'N/A'),
-                        "Symbol": deal.get('symbol', 'N/A'),
-                        "Type": deal_type,
-                        "Entry": entry_type,
-                        "Volume": f"{deal.get('volume', 0.0):.2f}",
-                        "Price": f"{deal.get('price', 0.0):.5f}",
-                        "P&L": f"${deal.get('profit', 0.0):.2f}",
-                        "Commission": f"${deal.get('commission', 0.0):.2f}",
-                        "Swap": f"${deal.get('swap', 0.0):.2f}"
-                    })
-                
-                if history_data:
-                    df_history = pd.DataFrame(history_data)
-                    st.dataframe(df_history, use_container_width=True, height=400)
-                else:
-                    st.warning("No trade deals found in the last 7 days")
-            else:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Trades", "0")
-                with col2:
-                    st.metric("Winning", "0")
-                with col3:
-                    st.metric("Win Rate", "0%")
-                st.warning("No trade history found in the last 7 days")
-        else:
-            st.error("❌ MT5 not connected - cannot retrieve trade history")
+            db = get_database_manager()
+            
             col1, col2, col3 = st.columns(3)
+            
             with col1:
-                st.metric("Total Trades", "0")
+                st.write("**Database Status**")
+                st.write(f"✅ Connected")
+                try:
+                    size_mb = os.path.getsize(db.db_path) / (1024 * 1024)
+                    st.write(f"📁 Size: {size_mb:.2f} MB")
+                except:
+                    st.write(f"📁 Size: N/A")
+            
             with col2:
-                st.metric("Winning", "0")
+                st.write("**Bot Status**")
+                mt5 = get_mt5_client()
+                if mt5.is_connected():
+                    st.write("✅ MT5 Connected")
+                    account = mt5.get_account_info()
+                    if account:
+                        st.write(f"💰 Balance: ${account.get('balance', 0):,.2f}")
+                else:
+                    st.write("❌ MT5 Disconnected")
+            
             with col3:
-                st.metric("Win Rate", "0%")
-    
-    with tab3:
-        st.info("📝 System logs and debugging")
-        st.code("No system logs available", language="log")
+                st.write("**Trading Loop**")
+                scheduler = st.session_state.get("scheduler")
+                if scheduler and scheduler.is_running():
+                    st.write("🟢 Loop Running")
+                else:
+                    st.write("⚪ Loop Stopped")
+        
+        except Exception as e:
+            st.error(f"Error loading system info: {e}")
 
 
 def main():
     """Main app"""
-    # Dashboard tab
-    tab_dashboard, tab_analysis, tab_config, tab_logs = st.tabs([
+    # Enhanced tabs with history
+    tab_dashboard, tab_analysis, tab_history, tab_analytics, tab_config, tab_logs = st.tabs([
         "📊 Dashboard",
         "📈 Analysis",
+        "📚 History",
+        "📉 Analytics",
         "⚙️ Configuration",
         "📋 Logs"
     ])
@@ -587,6 +765,46 @@ def main():
     
     with tab_analysis:
         render_analysis()
+    
+    with tab_history:
+        # New History section with sub-tabs
+        history_tab1, history_tab2, history_tab3 = st.tabs([
+            "📊 Analysis History",
+            "🤖 AI Decisions",
+            "📈 Trade Performance"
+        ])
+        
+        with history_tab1:
+            try:
+                from app.ui.pages_history import render_analysis_history_page
+                render_analysis_history_page()
+            except Exception as e:
+                st.error(f"Error loading analysis history: {e}")
+                logger.error(f"Analysis history error: {e}", exc_info=True)
+        
+        with history_tab2:
+            try:
+                from app.ui.pages_history import render_ai_decisions_page
+                render_ai_decisions_page()
+            except Exception as e:
+                st.error(f"Error loading AI decisions: {e}")
+                logger.error(f"AI decisions error: {e}", exc_info=True)
+        
+        with history_tab3:
+            try:
+                from app.ui.pages_history import render_trade_history_page
+                render_trade_history_page()
+            except Exception as e:
+                st.error(f"Error loading trade history: {e}")
+                logger.error(f"Trade history error: {e}", exc_info=True)
+    
+    with tab_analytics:
+        try:
+            from app.ui.pages_database_analytics import render_database_analytics
+            render_database_analytics()
+        except Exception as e:
+            st.error(f"Error loading analytics: {e}")
+            logger.error(f"Analytics error: {e}", exc_info=True)
     
     with tab_config:
         render_configuration()

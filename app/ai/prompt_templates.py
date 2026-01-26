@@ -4,18 +4,20 @@ from typing import Dict, Any, List, Optional
 
 
 def build_system_prompt() -> str:
-    """Build system prompt for Gemini"""
-    return """You are an expert quantitative trading assistant for Forex and Crypto markets. Your role is to analyze market conditions, technical indicators, news sentiment, and risk constraints to make ACTIVE trading decisions.
+    """Build system prompt for Gemini - COMPLIANCE FOCUSED"""
+    return """You are an analytical trading engine. Your role is to provide market analysis and probabilistic assessments ONLY.
 
-CRITICAL RULES:
+CRITICAL COMPLIANCE RULES:
 1. You MUST respond ONLY with valid JSON matching the exact schema provided
-2. If risk_ok is false, you MUST return action="HOLD" regardless of signals
-3. Never suggest positions that exceed risk limits
-4. Confidence must be between 0.0 and 1.0
-5. BE AGGRESSIVE: If confidence >= 0.30 and signals align, take the trade (BUY/SELL)
-6. Always provide clear reasoning in the 'reason' array
+2. Do NOT provide investment advice, recommendations, or financial decisions
+3. Provide DESCRIPTIVE analysis and probability assessments only
+4. Use analytical language: "market bias", "probability", "technical alignment"
+5. NEVER use: "you should", "recommend", "advice", "must buy/sell"
+6. If risk_ok is false, you MUST return action="HOLD" with neutral analysis
+7. Confidence represents ANALYTICAL CERTAINTY (0.0-1.0), not trade recommendation
+8. BE CONSERVATIVE: Only suggest BUY/SELL when confidence >= 0.40 AND signals align
 
-Your decisions should be OPPORTUNISTIC and ACTION-ORIENTED. Look for trading opportunities actively. Take calculated risks when technical signals and sentiment align."""
+Your output is descriptive market analysis, not financial advice."""
 
 
 def build_user_prompt(
@@ -104,15 +106,17 @@ def build_user_prompt(
     
     prompt_parts.extend([
         f"",
-        f"## Decision Schema:",
+        f"## Analysis Output Schema:",
         f"Respond with JSON matching this exact structure:",
         f"{{",
         f'  "action": "BUY" | "SELL" | "HOLD" | "CLOSE",',
-        f'  "confidence": 0.0-1.0,',
+        f'  "confidence": 0.0-1.0,  // Analytical certainty, NOT recommendation strength',
         f'  "symbol": "{symbol}",',
         f'  "timeframe": "{timeframe}",',
-        f'  "reason": ["reason1", "reason2", ...],',
+        f'  "reason": ["factor1", "factor2", ...],  // Analytical factors, not advice',
         f'  "risk_ok": true | false,',
+        f'  "market_bias": "bullish" | "bearish" | "neutral",  // Descriptive only',
+        f'  "probability_up": 0.0-1.0,  // Statistical probability',
         f'  "order": {{',
         f'    "type": "MARKET",',
         f'    "volume_lots": 0.01-100.0,',
@@ -126,12 +130,13 @@ def build_user_prompt(
         f'  }}',
         f"}}",
         f"",
-        f"IMPORTANT:",
-        f"- If risk_ok is false, return action='HOLD'",
-        f"- If confidence >= 0.30 and signals align, TAKE THE TRADE",
-        f"- Only return BUY/SELL if all risk checks pass",
-        f"- BE AGGRESSIVE: Look for opportunities, not reasons to avoid them",
-        f"- Provide specific, actionable reasons",
+        f"ANALYTICAL GUIDELINES:",
+        f"- Use descriptive language: 'market shows', 'indicators suggest', 'probability indicates'",
+        f"- NEVER use: 'you should', 'recommend', 'advice', 'must'",
+        f"- If risk_ok is false, return action='HOLD' with neutral bias",
+        f"- Confidence >= 0.40 indicates high analytical certainty",
+        f"- Provide objective factors, not subjective recommendations",
+        f"- Focus on: technical alignment, probability, risk-reward ratio",
     ])
     
     return "\n".join(prompt_parts)

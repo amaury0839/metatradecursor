@@ -1,4 +1,4 @@
-"""News sentiment analysis using Gemini"""
+"""News sentiment analysis (lightweight, no Gemini)"""
 
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
@@ -7,7 +7,6 @@ import hashlib
 from app.news.provider_base import NewsProvider
 from app.news.provider_stub import StubNewsProvider
 from app.news.provider_newsapi import NewsAPIProvider
-from app.ai.gemini_client import get_gemini_client
 from app.core.config import get_config
 from app.core.logger import setup_logger
 
@@ -19,7 +18,6 @@ class SentimentAnalyzer:
     
     def __init__(self):
         self.config = get_config()
-        self.gemini = get_gemini_client()
         
         # Initialize news provider
         if self.config.news.provider == "newsapi" and self.config.news.news_api_key:
@@ -71,77 +69,21 @@ class SentimentAnalyzer:
                 "headlines": [],
             }
         
-        # Analyze sentiment using Gemini
-        sentiment_result = self._analyze_with_gemini(symbol, news_articles)
-        
-        # Cache result
-        if sentiment_result:
-            self._cache[cache_key] = (sentiment_result, now)
-        
+        # Lightweight sentiment: neutral default; simple headline-based hint
+        sentiment_result = self._analyze_light(symbol, news_articles)
+        self._cache[cache_key] = (sentiment_result, now)
         return sentiment_result
     
-    def _analyze_with_gemini(
-        self,
-        symbol: str,
-        articles: List[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """Analyze sentiment using Gemini"""
-        try:
-            # Build prompt
-            headlines = [a.get("title", "") for a in articles[:5]]
-            descriptions = [a.get("description", "") for a in articles[:5]]
-            
-            prompt = f"""Analyze the sentiment of the following Forex news for {symbol}:
-
-Headlines:
-{chr(10).join(f"- {h}" for h in headlines if h)}
-
-Descriptions:
-{chr(10).join(f"- {d}" for d in descriptions if d)}
-
-Provide a JSON response with:
-{{
-  "score": -1.0 to 1.0 (negative = bearish, positive = bullish, 0 = neutral),
-  "summary": "Brief summary of overall sentiment",
-  "confidence": 0.0 to 1.0
-}}
-
-Be concise and focus on market impact."""
-            
-            # Use gemini client's generate_content method instead of direct model access
-            result_dict = self.gemini.generate_content(
-                system_prompt="You are a financial news sentiment analyzer.",
-                user_prompt=prompt,
-                use_cache=True
-            )
-            
-            if result_dict is None:
-                # Fallback when AI is unavailable
-                logger.debug("Sentiment analysis unavailable, returning neutral")
-                return {
-                    "score": 0.0,
-                    "summary": "Sentiment analysis unavailable",
-                    "headlines": headlines,
-                }
-            
-            # Validate and format
-            score = float(result_dict.get("score", 0.0))
-            score = max(-1.0, min(1.0, score))  # Clamp to [-1, 1]
-            
-            return {
-                "score": score,
-                "summary": result_dict.get("summary", "No summary available"),
-                "headlines": headlines,
-                "confidence": float(result_dict.get("confidence", 0.5)),
-            }
-            
-        except Exception as e:
-            logger.error(f"Error analyzing sentiment with Gemini: {e}", exc_info=True)
-            return {
-                "score": 0.0,
-                "summary": "Sentiment analysis failed",
-                "headlines": [a.get("title", "") for a in articles[:3]],
-            }
+    def _analyze_light(self, symbol: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Lightweight sentiment without Gemini; neutral baseline."""
+        headlines = [a.get("title", "") for a in articles[:5] if a.get("title")]
+        summary = "Sentiment analysis unavailable" if not headlines else "Neutral sentiment (AI disabled)"
+        return {
+            "score": 0.0,
+            "summary": summary,
+            "headlines": headlines,
+            "confidence": 0.0,
+        }
     
     def clear_cache(self):
         """Clear sentiment cache"""

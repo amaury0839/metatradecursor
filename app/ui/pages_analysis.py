@@ -120,7 +120,7 @@ def render_table_view(logs):
     
     st.dataframe(
         df.style.applymap(color_status, subset=["📊 Estado"]),
-        use_container_width=True,
+        width="stretch",
         height=600
     )
 

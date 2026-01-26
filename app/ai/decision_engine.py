@@ -4,7 +4,7 @@ import hashlib
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 from app.ai.gemini_client import get_gemini_client
-from app.ai.schemas import TradingDecision
+from app.ai.schemas import TradingDecision, neutral_decision
 from app.ai.prompt_templates import build_system_prompt, build_user_prompt
 from app.core.config import get_config
 from app.core.logger import setup_logger
@@ -113,6 +113,20 @@ class DecisionEngine:
                 }
                 for p in current_positions
             ]
+
+            # If technical layer already has a decisive signal, skip Gemini entirely
+            if technical_signal in ["BUY", "SELL"]:
+                logger.info(
+                    f"Bypassing Gemini for {symbol} {timeframe}: technical signal={technical_signal}"
+                )
+                decision = self._build_technical_decision(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    action=technical_signal,
+                    indicators=indicators,
+                    current_price=current_price,
+                )
+                return decision, None, None
             
             # Build prompts
             system_prompt = build_system_prompt()
@@ -143,46 +157,24 @@ class DecisionEngine:
             
             # Fallback to technical signal if AI unavailable
             if gemini_response is None:
-                logger.warning(f"AI unavailable, using technical signal for {symbol}")
-                # Create decision from technical signal
-                decision = TradingDecision(
-                    action=technical_signal,
-                    confidence=0.5,  # Lower confidence for technical-only
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    reason=["AI unavailable, using technical signal"],
-                    risk_ok=True,
-                    order=None
-                )
-                if technical_signal in ["BUY", "SELL"]:
-                    # Calculate volume based on risk and ATR-derived stops
-                    account_info = self.mt5.get_account_info()
-                    equity = account_info.get("equity", 1000) if account_info else 1000
-                    risk_amount = equity * (min(self.risk.risk_per_trade_pct, self.risk.max_trade_risk_pct) / 100)
-
-                    atr = indicators.get("atr", 0)
-                    stop_distance = self.risk.get_default_stop_distance(current_price, atr)
-                    sl_price = current_price - stop_distance if technical_signal == "BUY" else current_price + stop_distance
-                    tp_price = current_price + (stop_distance * 2) if technical_signal == "BUY" else current_price - (stop_distance * 2)
-
-                    volume = self.risk.calculate_position_size(
-                        symbol=symbol,
-                        entry_price=current_price,
-                        stop_loss_price=sl_price,
-                        risk_amount=risk_amount,
-                    )
-
-                    from app.ai.schemas import OrderDetails
-                    decision.order = OrderDetails(
-                        volume_lots=volume,
-                        sl_price=sl_price,
-                        tp_price=tp_price,
-                    )
-                
-                return decision, prompt_hash, None
+                logger.warning(f"AI unavailable, returning neutral decision for {symbol}")
+                return neutral_decision(symbol, timeframe), prompt_hash, "ai_unavailable"
             
             # Validate and parse response
             try:
+                # Ensure required fields exist even when Gemini returns partial/fallback payloads
+                gemini_response.setdefault('symbol', symbol)
+                gemini_response.setdefault('timeframe', timeframe)
+
+                # Ensure reasoning exists (convert from reason list if needed)
+                if 'reasoning' not in gemini_response or not gemini_response['reasoning']:
+                    reasons = gemini_response.get('reason', [])
+                    gemini_response['reasoning'] = '. '.join(reasons) if reasons else "No specific reasoning provided"
+                
+                # Ensure other defaults exist
+                gemini_response.setdefault('market_bias', 'neutral')
+                gemini_response.setdefault('sources', [])
+                
                 decision = TradingDecision(**gemini_response)
                 
                 # Additional validation
@@ -217,6 +209,53 @@ class DecisionEngine:
         except Exception as e:
             logger.error(f"Error in decision engine: {e}", exc_info=True)
             return None, None, str(e)
+
+    def _build_technical_decision(
+        self,
+        symbol: str,
+        timeframe: str,
+        action: str,
+        indicators: Dict[str, Any],
+        current_price: float,
+    ) -> TradingDecision:
+        """Create a TradingDecision purely from technical data, sizing the order."""
+        decision = TradingDecision(
+            action=action,
+            confidence=0.6,
+            symbol=symbol,
+            timeframe=timeframe,
+            reasoning="Technical signal strong enough; AI context skipped.",
+            market_bias="neutral",
+            risk_ok=True,
+            sources=["technical"],
+        )
+
+        if action in ["BUY", "SELL"]:
+            account_info = self.mt5.get_account_info()
+            equity = account_info.get("equity", 1000) if account_info else 1000
+            risk_amount = equity * (min(self.risk.risk_per_trade_pct, self.risk.max_trade_risk_pct) / 100)
+
+            atr = indicators.get("atr", 0)
+            stop_distance = self.risk.get_default_stop_distance(current_price, atr)
+            sl_price = current_price - stop_distance if action == "BUY" else current_price + stop_distance
+            tp_price = current_price + (stop_distance * 2) if action == "BUY" else current_price - (stop_distance * 2)
+
+            volume = self.risk.calculate_position_size(
+                symbol=symbol,
+                entry_price=current_price,
+                stop_loss_price=sl_price,
+                risk_amount=risk_amount,
+            )
+
+            from app.ai.schemas import OrderDetails
+
+            decision.order = OrderDetails(
+                volume_lots=volume,
+                sl_price=sl_price,
+                tp_price=tp_price,
+            )
+
+        return decision
 
 
 # Global instance

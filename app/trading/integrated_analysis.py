@@ -8,6 +8,7 @@ from app.core.logger import setup_logger
 from app.core.config import get_config
 from app.trading.market_status import get_market_status
 from app.ai.smart_decision_router import make_smart_decision
+from app.core.database import get_database_manager
 
 logger = setup_logger("integrated_analysis")
 
@@ -61,6 +62,7 @@ class IntegratedAnalyzer:
         self.sentiment_analyzer = get_sentiment_analyzer()
         self.news_cache = NewsCache(ttl_minutes=60)  # 1-hour cache
         self.market_status = get_market_status()
+        self.db = get_database_manager()  # Database manager
     
     def analyze_symbol(
         self,
@@ -157,9 +159,10 @@ class IntegratedAnalyzer:
                     result["ai_decision"] = {
                         "action": ai_decision.action,
                         "confidence": ai_decision.confidence,
-                        "reasoning": ai_decision.reasoning,
-                        "stop_loss": ai_decision.stop_loss,
-                        "take_profit": ai_decision.take_profit
+                        "reasoning": getattr(ai_decision, 'reasoning', '. '.join(getattr(ai_decision, 'reason', []))),
+                        "risk_ok": getattr(ai_decision, 'risk_ok', True),
+                        "stop_loss": getattr(ai_decision, 'stop_loss', None),
+                        "take_profit": getattr(ai_decision, 'take_profit', None)
                     }
                     result["available_sources"].append("AI_ENHANCED")
                     logger.info(
@@ -175,6 +178,14 @@ class IntegratedAnalyzer:
         result["signal"], result["confidence"] = self._get_integrated_signal(
             result, combined_score
         )
+        
+        # 5. Save analysis to database
+        try:
+            result["timeframe"] = timeframe
+            analysis_id = self.db.save_analysis(result)
+            result["analysis_id"] = analysis_id
+        except Exception as e:
+            logger.warning(f"Failed to save analysis to database: {e}")
         
         return result
     
@@ -226,6 +237,11 @@ class IntegratedAnalyzer:
         
         Returns: (signal, confidence)
         """
+        # If AI explicitly says risk is not OK (blocked/unavailable), do not open new trades
+        if analysis.get("ai_decision") and analysis["ai_decision"].get("risk_ok") is False:
+            logger.info("AI layer unavailable/blocked; forcing HOLD to avoid new entries")
+            return "HOLD", 0.05
+
         # Priority 1: Use AI decision if available and confident
         if analysis.get("ai_decision"):
             ai_dec = analysis["ai_decision"]

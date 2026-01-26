@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""
+QUICK START - Sistema de Base de Datos del Bot
+Start the bot with database system and analytics dashboard active
+"""
+
+import sys
+import os
+from pathlib import Path
+
+print("""
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║        🤖 AI Trading Bot with Database System                    ║
+║        Production Ready - Version 2.0                             ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
+
+🎯 OPCIÓN 1: INICIO RECOMENDADO (Con verificación)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python run_bot_with_db.py
+
+  ✅ Inicializa base de datos
+  ✅ Muestra estadísticas 
+  ✅ Abre UI con Analytics activa
+
+
+🎯 OPCIÓN 2: INICIO DIRECTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  streamlit run app/ui_improved.py
+
+  Abre: http://localhost:8501
+  Tab: "📉 Analytics" para ver datos históricos
+
+
+🎯 OPCIÓN 3: MIGRAR DATOS HISTÓRICOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python migrate_trades.py --days 90
+
+  ✅ Descarga 90 días de histórico desde MT5
+  ✅ Guarda en base de datos
+  ✅ Analytics muestra datos históricos
+
+
+📊 ACCEDIENDO A ANALYTICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Abre: http://localhost:8501
+2. Click en tab: "📉 Analytics"
+3. Explora 5 sub-tabs:
+
+   • Performance: Equity curve, P&L, win rate
+   • Trade Analysis: Filtros, por símbolo, tabla completa
+   • AI Decisions: Comparación motores, confianza
+   • Analysis History: Indicadores técnicos, tendencias
+   • System Stats: Health check, conteos, resumen
+
+
+📈 DATOS DISPONIBLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Trades: {ticket, symbol, type, volume, prices, P&L}
+✅ Decisiones AI: {action, confidence, engine, sources}
+✅ Análisis: {RSI, MACD, Bollinger, sentiment, signal}
+✅ Métricas: {win rate, profit factor, max drawdown}
+
+
+🔍 VERIFICAR SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python init_database.py
+
+  ✅ Verifica inicialización
+  ✅ Muestra estadísticas de BD
+  ✅ Confirma integraciones activas
+
+
+📁 ESTRUCTURA DE ARCHIVOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+database.py
+├── DatabaseManager class
+├── 5 tablas SQLite
+├── Auto-save en análisis, decisiones, trades
+
+pages_database_analytics.py
+├── 5 tabs de visualización
+├── Plotly charts
+├── Pandas tables
+└── Filtros interactivos
+
+ui_improved.py
+├── 6 tabs principales
+├── Tab "📉 Analytics" agregada
+├── Todas las features integradas
+└── Error handling incluido
+
+
+🚀 FLUJO COMPLETO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Bot ejecuta análisis (cada 30s)
+   ↓ db.save_analysis() → analysis_history
+
+2. Smart router toma decisión
+   ↓ db.save_ai_decision() → ai_decisions
+
+3. Si hay señal, ejecuta trade
+   ↓ db.save_trade() → trades (status='open')
+
+4. Cierra cuando condición se cumple
+   ↓ db.update_trade() → trades (status='closed', profit)
+
+5. Analytics muestra todo en tiempo real
+   ↓ Gráficos, tablas, métricas
+   ↓ Exportable a CSV
+
+
+✨ FUNCIONALIDADES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Enhanced AI con búsqueda web
+✅ Smart router (Enhanced → Simple fallback)
+✅ Base de datos SQLite completa
+✅ Auto-saving de análisis, decisiones, trades
+✅ Analytics dashboard en tiempo real
+✅ 5 tabs de visualización
+✅ Filtros interactivos
+✅ Exportación a CSV
+✅ Migration tool para histórico
+✅ Health check & monitoring
+
+
+📚 DOCUMENTACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATABASE_SYSTEM.md      → Detalles técnicos del esquema
+DATABASE_USAGE.md       → Guía de usuario con ejemplos
+SISTEMA_COMPLETO.md     → Resumen del sistema completo
+IMPLEMENTACION_COMPLETADA.md → Checklist de completación
+
+
+🎯 COMANDOS RÁPIDOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Iniciar bot con BD:         python run_bot_with_db.py
+Iniciar UI directa:         streamlit run app/ui_improved.py
+Verificar BD:               python init_database.py
+Migrar histórico:           python migrate_trades.py --days 90
+Migrar símbolos específicos: python migrate_trades.py --symbols EURUSD,XRPUSD
+
+
+💾 UBICACIÓN BASE DE DATOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: data/trading_history.db
+Type: SQLite3
+Size: Crece con histórico (empieza ~1 MB)
+Backup: Copiar archivo a otro lugar para respaldo
+
+
+🐛 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Problema: Analytics tab vacío
+Solución: 
+  1. Espera 30s para primer análisis
+  2. Refresca página (F5)
+  3. Verifica logs
+
+Problema: Base de datos no inicializa
+Solución:
+  1. python init_database.py
+  2. Verifica que data/ directory existe
+  3. Revisa permisos de carpeta
+
+Problema: No se guardan trades
+Solución:
+  1. Verifica que bot está corriendo
+  2. Revisa logs/database.log
+  3. Ejecuta: python init_database.py
+
+
+📞 SOPORTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Errores SQL: Ver app/core/database.py
+Errors UI: Ver logs/streamlit_*.log
+Logic: Ver app/trading/integrated_analysis.py, app/ai/smart_decision_router.py
+
+
+════════════════════════════════════════════════════════════════════
+                    ¡LISTO PARA OPERAR!
+════════════════════════════════════════════════════════════════════
+
+Comando recomendado:
+
+    python run_bot_with_db.py
+
+Abre http://localhost:8501 → Tab "📉 Analytics"
+
+════════════════════════════════════════════════════════════════════
+""")
