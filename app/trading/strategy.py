@@ -1,10 +1,12 @@
 """Trading strategy: technical indicators and signals"""
 
+import os
 import pandas as pd
 import numpy as np
 from typing import Optional, Dict, Tuple
 from app.trading.data import get_data_provider
 from app.core.logger import setup_logger
+from app.ai.onnx_model import load_onnx_classifier, OnnxClassifier
 
 logger = setup_logger("strategy")
 
@@ -39,6 +41,8 @@ class TradingStrategy:
     
     def __init__(self):
         self.data = get_data_provider()
+        self.regime_model_path = os.getenv("ONNX_REGIME_MODEL")
+        self.regime_clf: Optional[OnnxClassifier] = load_onnx_classifier(self.regime_model_path) if self.regime_model_path else None
 
         # Defaults (used by swing profile)
         self.ema_fast_period = 20
@@ -89,25 +93,68 @@ class TradingStrategy:
             },
         }
     
+    def _classify_regime(self, df: pd.DataFrame) -> Optional[str]:
+        """Detect market regime via ONNX if available, else heuristic."""
+        try:
+            close_val = float(df.iloc[-1]["close"])
+            ema_fast = float(df.iloc[-1]["ema_fast"])
+            ema_slow = float(df.iloc[-1]["ema_slow"])
+            rsi_val = float(df.iloc[-1]["rsi"])
+            atr_val = float(df.iloc[-1]["atr"])
+        except Exception:
+            return None
+
+        if self.regime_clf:
+            try:
+                signal, _ = self.regime_clf.predict([
+                    close_val,
+                    ema_fast,
+                    ema_slow,
+                    rsi_val,
+                    atr_val,
+                    ema_fast - ema_slow,
+                ])
+                sig = signal.lower()
+                if sig in {"trend", "range"}:
+                    return sig
+            except Exception:
+                pass
+
+        # Heuristic fallback
+        vol_ratio = abs(atr_val) / close_val if close_val else 0.0
+        ema_gap = abs(ema_fast - ema_slow) / close_val if close_val else 0.0
+        if ema_gap > 0.0005 or vol_ratio > 0.002:
+            return "trend"
+        return "range"
+
     def _select_profile(self, timeframe: str, df: pd.DataFrame) -> str:
-        """Choose SCALPING for cortos y volátiles, SWING otherwise."""
+        """Choose profile using timeframe bias, regime detection and volatility."""
         tf = timeframe.upper()
-        # Timeframe bias
+
+        # Baseline by timeframe
         if tf in {"M1", "M5", "M15"}:
             profile = "SCALPING"
+        elif tf in {"H1", "H4", "D1", "W1"}:
+            profile = "TREND"
         else:
             profile = "SWING"
 
-        # Volatility bias: if ATR/close is high, prefer scalping even on higher TF
-        if len(df) >= 2:
+        # Regime detection
+        regime = self._classify_regime(df)
+        if regime == "trend":
+            profile = "TREND" if tf not in {"M1", "M5", "M15"} else profile
+        elif regime == "range":
+            if profile != "SCALPING":
+                profile = "SWING"
+
+        # Volatility bias for lower TF
+        if len(df) >= 2 and tf in {"M1", "M5", "M15"}:
             close_val = float(df.iloc[-1]["close"])
             atr_val = calculate_atr(df["high"], df["low"], df["close"], self.profiles["SCALPING"]["atr_period"]).iloc[-1]
             vol_ratio = abs(atr_val) / close_val if close_val else 0.0
             if vol_ratio >= self.profiles["SCALPING"]["volatility_floor"]:
                 profile = "SCALPING"
-        # Majors en timeframes altos: priorizar momentum clásico 50/200
-        if tf in {"H1", "H4", "D1", "W1"}:
-            return "TREND"
+
         return profile
 
     def _calc_indicators_with_profile(self, df: pd.DataFrame, profile: str) -> pd.DataFrame:
