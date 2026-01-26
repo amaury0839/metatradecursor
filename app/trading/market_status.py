@@ -14,14 +14,15 @@ class MarketStatus:
     """Detects market open/close status for Forex and Crypto"""
     
     # Forex market hours (all times in GMT/UTC)
+    # Trading: Sunday 21:00 → Friday 21:00 (Saturday completely closed)
     FOREX_MARKET_HOURS = {
-        0: (21, 0),  # Sunday: 21:00 to 23:59
-        1: (0, 21),  # Monday-Friday: 00:00 to 21:00
-        2: (0, 21),
-        3: (0, 21),
-        4: (0, 21),
-        5: (0, 21),
-        6: (0, 21),  # Saturday: 00:00 to 21:00
+        0: (21, 0),  # Sunday: 21:00 to 23:59 (opens Sunday night)
+        1: (0, 21),  # Monday: 00:00 to 21:00
+        2: (0, 21),  # Tuesday: 00:00 to 21:00
+        3: (0, 21),  # Wednesday: 00:00 to 21:00
+        4: (0, 21),  # Thursday: 00:00 to 21:00
+        5: (0, 21),  # Friday: 00:00 to 21:00 (closes Friday at 21:00 UTC)
+        # Saturday (6) not included = completely closed
     }
     
     # Cryptocurrencies - always open
