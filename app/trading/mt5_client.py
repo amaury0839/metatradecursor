@@ -262,6 +262,16 @@ class MT5Client:
         Args:
             symbol: Symbol name
             timeframe: MT5 timeframe constant (e.g., mt5.TIMEFRAME_M15)
+
+        def order_calc_margin(self, order_type: int, symbol: str, volume: float, price: float) -> Optional[float]:
+            """Proxy for mt5.order_calc_margin; returns None in demo mode."""
+            if not self.is_connected() or not MT5_AVAILABLE:
+                return None
+            try:
+                return mt5.order_calc_margin(order_type, symbol, volume, price)
+            except Exception as e:
+                logger.warning(f"order_calc_margin failed for {symbol}: {e}")
+                return None
             count: Number of candles to retrieve
             start_time: Start time (optional)
         

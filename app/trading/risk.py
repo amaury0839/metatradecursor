@@ -277,19 +277,18 @@ class RiskManager:
             if margin_free <= 0:
                 return 0.0
 
-            order_type = 0  # BUY
-            margin_calc = self.mt5.order_calc_margin(order_type, symbol, requested_volume, entry_price)
+            # Assume BUY for sizing; SELL margin similar for FX/crypto retail
+            margin_calc = self.mt5.order_calc_margin(0, symbol, requested_volume, entry_price)
             if margin_calc is None or margin_calc <= 0:
                 return requested_volume
 
-            margin_per_lot = margin_calc / requested_volume
+            margin_per_lot = margin_calc / max(requested_volume, 1e-9)
             allowed = (margin_free * 0.5) / margin_per_lot  # Usa 50% del margen libre para holgura
 
             symbol_info = self.mt5.get_symbol_info(symbol)
             volume_step = symbol_info.get('volume_step', 0.01) if symbol_info else 0.01
 
             capped = min(requested_volume, allowed)
-            # round down to step
             capped = max(0.0, (int(capped / volume_step)) * volume_step)
             return capped
         except Exception as e:
