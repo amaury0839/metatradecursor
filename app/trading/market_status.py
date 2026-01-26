@@ -59,19 +59,23 @@ class MarketStatus:
     def is_forex_market_open(self, symbol: str) -> bool:
         """
         Check if market is open for symbol.
-        Crypto: always open.
+        Crypto: always open (24/7).
         Forex: requires BOTH broker trade_mode open AND time window open (UTC).
         """
+        # Crypto ALWAYS open regardless of broker status
         if symbol in self.CRYPTO_24_7:
-            return True  # Crypto always open
+            logger.debug(f"{symbol} is crypto - always 24/7 open")
+            return True
 
         if self._is_blocked(symbol):
+            logger.debug(f"{symbol} is temporarily blocked")
             return False
 
         time_open = self._is_market_open_by_time()
 
         # If time window says cerrado (e.g., fin de semana), short-circuit
         if not time_open:
+            logger.debug(f"{symbol} is outside Forex market hours (UTC)")
             return False
 
         # Broker check
@@ -81,20 +85,32 @@ class MarketStatus:
                 if symbol_info:
                     trade_mode = symbol_info.get('trade_mode', 0)
                     # trade_mode: 2 or 4 = market open, others = closed
-                    return trade_mode in [2, 4]
+                    is_open = trade_mode in [2, 4]
+                    logger.debug(f"{symbol} MT5 trade_mode={trade_mode} -> open={is_open}")
+                    return is_open
             except Exception as e:
                 logger.warning(f"Error checking MT5 trade_mode for {symbol}: {e}")
 
         # If broker info not available, fall back to time check
+        logger.debug(f"{symbol} using time-based check -> {time_open}")
         return time_open
 
     def is_symbol_open(self, symbol: str) -> bool:
-        """Unified open check including temporary blocks."""
-        # Crypto bypasses block and time checks (24/7)
+        """
+        Unified open check including temporary blocks.
+        
+        For crypto: ALWAYS TRUE (24/7 trading, ignore market_status)
+        For forex: Check both time windows and MT5 broker status
+        """
+        # Crypto ALWAYS tradable, never check blocks or time
         if symbol in self.CRYPTO_24_7:
+            logger.debug(f"{symbol} is crypto -> always open (24/7)")
             return True
+            
         if self._is_blocked(symbol):
+            logger.debug(f"{symbol} is blocked temporarily")
             return False
+            
         return self.is_forex_market_open(symbol)
     
     def _is_market_open_by_time(self) -> bool:
