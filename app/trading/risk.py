@@ -29,16 +29,16 @@ class RiskManager:
         self.mt5 = get_mt5_client()
         self.data = get_data_provider()
         self.portfolio = get_portfolio_manager()
-        # Parámetros ajustados para demo
-        self.risk_per_trade_pct = 2.0
-        self.max_daily_loss_pct = 90.0
-        self.max_drawdown_pct = 90.0
-        self.max_positions = 100
+        # Perfil de riesgo medio (más conservador que el ajuste demo previo)
+        self.risk_per_trade_pct = 1.0          # % de equity por operación
+        self.max_daily_loss_pct = 6.0          # stop diario
+        self.max_drawdown_pct = 12.0           # drawdown máximo permitido
+        self.max_positions = 5                 # limitar exposición total
         self.max_slippage_pips = 5.0
-        self.max_trade_risk_pct = 50.0
+        self.max_trade_risk_pct = 6.0          # techo duro por operación
         self.default_stop_loss_pct = 0.01
-        self.hard_max_volume_lots = 1.0  # Seguridad: no permitir que la IA pida >1 lote
-        self.crypto_max_volume_lots = 0.30  # Aún más bajo para cripto
+        self.hard_max_volume_lots = 0.50       # cap general
+        self.crypto_max_volume_lots = 0.20     # cap cripto aún más bajo
         # Horario extendido: operar 24h
         self.trading_hours_start = time(0, 0)
         self.trading_hours_end = time(23, 59)
