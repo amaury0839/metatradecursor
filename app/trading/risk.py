@@ -38,6 +38,7 @@ class RiskManager:
         self.max_trade_risk_pct = 50.0
         self.default_stop_loss_pct = 0.01
         self.hard_max_volume_lots = 1.0  # Seguridad: no permitir que la IA pida >1 lote
+        self.crypto_max_volume_lots = 0.30  # Aún más bajo para cripto
         # Horario extendido: operar 24h
         self.trading_hours_start = time(0, 0)
         self.trading_hours_end = time(23, 59)
@@ -203,6 +204,10 @@ class RiskManager:
         min_volume = symbol_info.get('volume_min', 0.01)
         max_volume = min(symbol_info.get('volume_max', 100.0), self.hard_max_volume_lots)
         volume_step = symbol_info.get('volume_step', 0.01)
+
+        # Cap adicional para cripto
+        if any(crypto in symbol.upper() for crypto in self.CRYPTO_SYMBOLS):
+            max_volume = min(max_volume, self.crypto_max_volume_lots)
         
         # If calculated volume is less than minimum, return 0 (trade not viable)
         # This prevents forcing minimum volume which could be way too large for our capital
@@ -255,7 +260,41 @@ class RiskManager:
         )
         # Aplica cap duro incluso si el sizing devolvió algo mayor
         capped = min(requested_volume, max_volume, self.hard_max_volume_lots)
-        return capped
+
+        # Cap adicional por margen disponible
+        margin_capped = self.cap_volume_by_margin(symbol, entry_price, capped)
+        return margin_capped
+
+    def cap_volume_by_margin(self, symbol: str, entry_price: float, requested_volume: float) -> float:
+        """Reduce volumen si el margen libre no alcanza (usa 50% del margen libre como techo)."""
+        if requested_volume <= 0:
+            return 0.0
+        try:
+            account_info = self.mt5.get_account_info()
+            if not account_info:
+                return requested_volume
+            margin_free = account_info.get('margin_free', 0)
+            if margin_free <= 0:
+                return 0.0
+
+            order_type = 0  # BUY
+            margin_calc = self.mt5.order_calc_margin(order_type, symbol, requested_volume, entry_price)
+            if margin_calc is None or margin_calc <= 0:
+                return requested_volume
+
+            margin_per_lot = margin_calc / requested_volume
+            allowed = (margin_free * 0.5) / margin_per_lot  # Usa 50% del margen libre para holgura
+
+            symbol_info = self.mt5.get_symbol_info(symbol)
+            volume_step = symbol_info.get('volume_step', 0.01) if symbol_info else 0.01
+
+            capped = min(requested_volume, allowed)
+            # round down to step
+            capped = max(0.0, (int(capped / volume_step)) * volume_step)
+            return capped
+        except Exception as e:
+            logger.warning(f"Failed margin cap for {symbol}: {e}")
+            return requested_volume
     
     def _is_trading_hours(self) -> bool:
         """Check if current time is within trading hours"""
