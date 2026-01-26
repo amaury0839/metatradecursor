@@ -76,6 +76,17 @@ class TradingStrategy:
                 "rsi_oversold": 30,
                 "volatility_floor": 0.0,
             },
+            "TREND": {  # Momentum/trend-following clásico (50/200)
+                "ema_fast": 50,
+                "ema_slow": 200,
+                "rsi_period": 14,
+                "atr_period": 14,
+                "rsi_buy": 55,
+                "rsi_sell": 45,
+                "rsi_overbought": 75,
+                "rsi_oversold": 25,
+                "volatility_floor": 0.0,
+            },
         }
     
     def _select_profile(self, timeframe: str, df: pd.DataFrame) -> str:
@@ -94,6 +105,9 @@ class TradingStrategy:
             vol_ratio = abs(atr_val) / close_val if close_val else 0.0
             if vol_ratio >= self.profiles["SCALPING"]["volatility_floor"]:
                 profile = "SCALPING"
+        # Majors en timeframes altos: priorizar momentum clásico 50/200
+        if tf in {"H1", "H4", "D1", "W1"}:
+            return "TREND"
         return profile
 
     def _calc_indicators_with_profile(self, df: pd.DataFrame, profile: str) -> pd.DataFrame:
@@ -201,7 +215,7 @@ class TradingStrategy:
                 reasons.append("Scalping: RSI sobrevendido, pausa")
 
         # Swing rules: seguir tendencia + RSI moderado
-        else:
+        elif profile == "SWING":
             if latest['trend_bullish'] and latest['rsi'] >= params['rsi_buy']:
                 signal = "BUY"
                 reasons.append("Swing: Tendencia alcista + RSI confirma")
@@ -211,6 +225,21 @@ class TradingStrategy:
             else:
                 signal = "HOLD"
                 reasons.append("Swing: Sin confirmación de RSI/tendencia")
+
+        # Trend-following clásico: dejar correr, cortar pérdidas
+        else:  # TREND
+            ema_cross_up = prev['ema_fast'] <= prev['ema_slow'] and latest['ema_fast'] > latest['ema_slow']
+            ema_cross_down = prev['ema_fast'] >= prev['ema_slow'] and latest['ema_fast'] < latest['ema_slow']
+
+            if latest['trend_bullish'] and (ema_cross_up or latest['rsi'] >= params['rsi_buy']):
+                signal = "BUY"
+                reasons.append("Trend: cruce 50/200 o RSI confirma momentum alcista")
+            elif latest['trend_bearish'] and (ema_cross_down or latest['rsi'] <= params['rsi_sell']):
+                signal = "SELL"
+                reasons.append("Trend: cruce 50/200 o RSI confirma momentum bajista")
+            else:
+                signal = "HOLD"
+                reasons.append("Trend: sin confirmación de cruce/RSI")
         
         return signal, indicators, None
     
