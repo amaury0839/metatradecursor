@@ -33,7 +33,7 @@ class RiskManager:
         self.risk_per_trade_pct = 1.0          # % de equity por operación
         self.max_daily_loss_pct = 6.0          # stop diario
         self.max_drawdown_pct = 12.0           # drawdown máximo permitido
-        self.max_positions = 5                 # limitar exposición total
+        self.max_positions = 20                # limitar exposición total
         self.max_slippage_pips = 5.0
         self.max_trade_risk_pct = 6.0          # techo duro por operación
         self.default_stop_loss_pct = 0.01
