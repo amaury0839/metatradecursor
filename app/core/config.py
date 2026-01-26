@@ -61,8 +61,8 @@ class AIConfig(BaseSettings):
     """AI/Gemini configuration - OPTIONAL for cloud deployment"""
     
     gemini_api_key: Optional[str] = Field(None, alias="GEMINI_API_KEY")
-    gemini_model: str = Field("gemini-2.0-flash", alias="GEMINI_MODEL")
-    min_confidence_threshold: float = 0.30  # Más agresivo: umbral reducido
+    gemini_model: str = Field("gemini-2.5-flash-lite", alias="GEMINI_MODEL")
+    min_confidence_threshold: float = 0.25  # Optimized: lower threshold for more execution
     max_retries: int = 3
     timeout_seconds: int = 30
     

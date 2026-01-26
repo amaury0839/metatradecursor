@@ -24,21 +24,29 @@ class RiskManager:
     FOREX_MAX_SPREAD_PIPS = 10.0      # Forex: tight spreads expected
     CRYPTO_MAX_SPREAD_PIPS = 300.0    # Crypto: much higher spreads are normal
     
+    # Volume minimums (optimized for execution)
+    MIN_VOLUME_FOREX = 0.01
+    MIN_VOLUME_CRYPTO = 0.01
+    
+    # ATR multipliers (optimized risk/reward)
+    ATR_MULTIPLIER_SL = 1.5
+    ATR_MULTIPLIER_TP = 2.0
+    
     def __init__(self):
         self.config = get_config()
         self.mt5 = get_mt5_client()
         self.data = get_data_provider()
         self.portfolio = get_portfolio_manager()
         # Perfil de riesgo medio (más conservador que el ajuste demo previo)
-        self.risk_per_trade_pct = 1.0          # % de equity por operación
-        self.max_daily_loss_pct = 6.0          # stop diario
-        self.max_drawdown_pct = 12.0           # drawdown máximo permitido
-        self.max_positions = 20                # limitar exposición total
-        self.max_slippage_pips = 5.0
-        self.max_trade_risk_pct = 6.0          # techo duro por operación
-        self.default_stop_loss_pct = 0.01
+        self.risk_per_trade_pct = 2.0          # % de equity por operación (aumentado)
+        self.max_daily_loss_pct = 8.0          # stop diario (más flexible)
+        self.max_drawdown_pct = 15.0           # drawdown máximo permitido (más flexible)
+        self.max_positions = 25                # limitar exposición total (aumentado)
+        self.max_slippage_pips = 8.0           # más tolerancia
+        self.max_trade_risk_pct = 8.0          # techo duro por operación (aumentado)
+        self.default_stop_loss_pct = 0.015     # SL ligeramente más amplio
         self.hard_max_volume_lots = 0.50       # cap general
-        self.crypto_max_volume_lots = 0.20     # cap cripto aún más bajo
+        self.crypto_max_volume_lots = 0.30     # cap cripto aumentado
         # Horario extendido: operar 24h
         self.trading_hours_start = time(0, 0)
         self.trading_hours_end = time(23, 59)
@@ -122,7 +130,9 @@ class RiskManager:
         # 9. Check symbol info and volume limits
         symbol_info = self.mt5.get_symbol_info(symbol)
         if symbol_info:
-            min_volume = symbol_info.get('volume_min', 0.01)
+            # Use optimized minimums instead of broker minimums
+            is_crypto = any(crypto in symbol.upper() for crypto in self.CRYPTO_SYMBOLS)
+            min_volume = self.MIN_VOLUME_CRYPTO if is_crypto else self.MIN_VOLUME_FOREX
             max_volume = symbol_info.get('volume_max', 100.0)
             
             if proposed_volume < min_volume:
@@ -130,9 +140,10 @@ class RiskManager:
             if proposed_volume > max_volume:
                 failures.append(f"Volume above maximum: {proposed_volume} > {max_volume}")
             # Hard cap independiente del broker
-            if proposed_volume > self.hard_max_volume_lots:
+            max_cap = self.crypto_max_volume_lots if is_crypto else self.hard_max_volume_lots
+            if proposed_volume > max_cap:
                 failures.append(
-                    f"Volume above bot cap: {proposed_volume} > {self.hard_max_volume_lots} (safety cap)"
+                    f"Volume above bot cap: {proposed_volume} > {max_cap} (safety cap)"
                 )
         else:
             failures.append(f"Cannot get symbol info for {symbol}")
@@ -309,17 +320,21 @@ class RiskManager:
     def calculate_stop_loss_atr(
         self, 
         atr_value: float, 
-        multiplier: float = 1.5
+        multiplier: float = None
     ) -> float:
         """Calculate stop loss distance based on ATR"""
+        if multiplier is None:
+            multiplier = self.ATR_MULTIPLIER_SL
         return atr_value * multiplier
     
     def calculate_take_profit_atr(
         self, 
         atr_value: float, 
-        multiplier: float = 2.5
+        multiplier: float = None
     ) -> float:
         """Calculate take profit distance based on ATR"""
+        if multiplier is None:
+            multiplier = self.ATR_MULTIPLIER_TP
         return atr_value * multiplier
 
 
