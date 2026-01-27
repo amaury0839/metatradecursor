@@ -457,24 +457,21 @@ def render_analysis_logs():
     """Show analysis logs with filters"""
     st.subheader("📝 Analysis Logs & Events")
     
-    # Get positions safely
-    positions = fetch_positions()
-    available_symbols = list(set([p.get('symbol') for p in positions if p.get('symbol')]))
-    
     # Filters
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        filter_symbol = st.selectbox(
-            "Symbol",
-            options=["All"] + available_symbols if available_symbols else ["All"],
-            index=0
+        filter_symbol_input = st.text_input(
+            "Filter by Symbol (leave empty for all)",
+            value="",
+            placeholder="e.g., EURUSD"
         )
+        filter_symbol = filter_symbol_input if filter_symbol_input else None
     
     with col2:
         filter_type = st.selectbox(
-            "Type",
-            options=["All", "TECHNICAL", "AI", "EXECUTION", "RISK"],
+            "Analysis Type",
+            options=["All", "TECHNICAL", "AI", "EXECUTION", "RISK", "SENTIMENT"],
             index=0
         )
     
@@ -489,7 +486,6 @@ def render_analysis_logs():
         limit = st.slider("Limit", min_value=10, max_value=500, value=100, step=10)
     
     # Fetch logs with filters
-    symbol_param = filter_symbol if filter_symbol != "All" else None
     type_param = filter_type if filter_type != "All" else None
     status_param = filter_status if filter_status != "All" else None
     
