@@ -203,12 +203,17 @@ class ExecutionManager:
             if tp_price:
                 tp_price = norm(symbol, tp_price)
             
-            # ✅ 1️⃣ Validar SL/TP CONTRA BID/ASK en vivo
+            # ✅ 1️⃣ Validar SL/TP CONTRA BID/ASK en vivo con fallback sin stops
+            original_sl, original_tp = sl_price, tp_price
+            stops_valid = True
             if sl_price and tp_price:
                 valid, error = validate_stops_live(symbol, order_type.upper(), sl_price, tp_price)
                 if not valid:
                     logger.warning(f"⚠️ {symbol}: {error}")
-                    return False, None, f"Stop validation failed: {error}"
+                    logger.warning("Stops invalid → opening without SL/TP (will modify after entry)")
+                    sl_price = None
+                    tp_price = None
+                    stops_valid = False
             
             # Normalize volume
             try:
@@ -249,15 +254,19 @@ class ExecutionManager:
                 logger.info(f"  Balance: {check.balance}, Profit: {check.profit}")
             else:
                 logger.error(f"  ❌ order_check() returned None")
-            
-            # Si order_check falla → error claro
-            if check is None or check.retcode != mt5.TRADE_RETCODE_DONE:
-                error_msg = check.comment if check else "order_check returned None"
-                logger.error(f"❌ Order validation failed: {error_msg}")
-                return False, None, f"Order check failed: {error_msg}"
+                return False, None, "Order check failed: order_check returned None"
+
+            success_retcodes = {mt5.TRADE_RETCODE_DONE, 0}
+            if check.retcode not in success_retcodes:
+                logger.error(
+                    f"Order check failed: retcode={check.retcode}, comment={check.comment}"
+                )
+                return False, None, f"Order check failed: {check.comment}"
             
             # ✅ order_check OK → enviar
-            logger.info(f"✅ order_check passed. Sending order...")
+            logger.info(
+                f"✅ order_check passed (retcode={check.retcode}, comment={check.comment}), sending order"
+            )
             result = mt5.order_send(request)
             
             if result is None:
@@ -282,6 +291,25 @@ class ExecutionManager:
                 f"Order placed successfully: {order_type} {volume} lots of {symbol} "
                 f"at {result.price}, ticket={result.order}"
             )
+
+            # Si abrimos sin SL/TP por validación, aplicar después de entrar
+            if not stops_valid and original_sl and original_tp:
+                try:
+                    adj_sl, adj_tp = self._enforce_min_stop_distance(
+                        symbol,
+                        order_type,
+                        result.price,
+                        original_sl,
+                        original_tp,
+                        symbol_info,
+                    )
+                    ok, err = self.modify_position(result.order, sl_price=adj_sl, tp_price=adj_tp)
+                    if ok:
+                        logger.info(f"✅ SL/TP applied post-entry: SL={adj_sl}, TP={adj_tp}")
+                    else:
+                        logger.warning(f"Could not apply SL/TP after entry: {err}")
+                except Exception as e:
+                    logger.warning(f"Post-entry SL/TP apply failed: {e}")
             
             return True, result_dict, None
             

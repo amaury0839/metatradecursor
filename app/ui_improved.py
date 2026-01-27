@@ -490,7 +490,7 @@ def render_analysis_logs():
     status_param = filter_status if filter_status != "All" else None
     
     logs = fetch_analysis_logs(
-        symbol=symbol_param,
+        symbol=filter_symbol,
         analysis_type=type_param,
         status=status_param,
         limit=limit
