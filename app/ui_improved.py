@@ -457,13 +457,17 @@ def render_analysis_logs():
     """Show analysis logs with filters"""
     st.subheader("📝 Analysis Logs & Events")
     
+    # Get positions safely
+    positions = fetch_positions()
+    available_symbols = list(set([p.get('symbol') for p in positions if p.get('symbol')]))
+    
     # Filters
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         filter_symbol = st.selectbox(
             "Symbol",
-            options=["All"] + list(set([p.get('symbol') for p in fetch_positions() if p.get('symbol')])),
+            options=["All"] + available_symbols if available_symbols else ["All"],
             index=0
         )
     
