@@ -67,6 +67,19 @@ def fetch_decisions():
     data = api_call("/decisions?limit=100")
     return data.get("decisions", []) if data else []
 
+def fetch_analysis_logs(symbol: str = None, analysis_type: str = None, status: str = None, limit: int = 100):
+    """Fetch analysis logs with optional filters"""
+    endpoint = "/logs/analysis?limit=" + str(limit)
+    if symbol:
+        endpoint += f"&symbol={symbol}"
+    if analysis_type:
+        endpoint += f"&analysis_type={analysis_type}"
+    if status:
+        endpoint += f"&status={status}"
+    
+    data = api_call(endpoint)
+    return data.get("logs", []) if data else []
+
 # Page Config
 st.set_page_config(
     page_title="AI Trading Bot Dashboard",
@@ -439,6 +452,144 @@ def render_symbols():
     with col4:
         st.metric("⏱️ Timeframe", "M15")
 
+# ========== ANALYSIS LOGS TAB ==========
+def render_analysis_logs():
+    """Show analysis logs with filters"""
+    st.subheader("📝 Analysis Logs & Events")
+    
+    # Filters
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        filter_symbol = st.selectbox(
+            "Symbol",
+            options=["All"] + list(set([p.get('symbol') for p in fetch_positions() if p.get('symbol')])),
+            index=0
+        )
+    
+    with col2:
+        filter_type = st.selectbox(
+            "Type",
+            options=["All", "TECHNICAL", "AI", "EXECUTION", "RISK"],
+            index=0
+        )
+    
+    with col3:
+        filter_status = st.selectbox(
+            "Status",
+            options=["All", "SUCCESS", "WARNING", "ERROR"],
+            index=0
+        )
+    
+    with col4:
+        limit = st.slider("Limit", min_value=10, max_value=500, value=100, step=10)
+    
+    # Fetch logs with filters
+    symbol_param = filter_symbol if filter_symbol != "All" else None
+    type_param = filter_type if filter_type != "All" else None
+    status_param = filter_status if filter_status != "All" else None
+    
+    logs = fetch_analysis_logs(
+        symbol=symbol_param,
+        analysis_type=type_param,
+        status=status_param,
+        limit=limit
+    )
+    
+    if not logs:
+        st.info("📭 No logs found matching the filters")
+        return
+    
+    st.divider()
+    
+    # Statistics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📋 Total Logs", len(logs))
+    
+    with col2:
+        success_count = len([l for l in logs if l.get('status') == 'SUCCESS'])
+        st.metric("✅ Success", success_count)
+    
+    with col3:
+        warning_count = len([l for l in logs if l.get('status') == 'WARNING'])
+        st.metric("⚠️ Warnings", warning_count)
+    
+    with col4:
+        error_count = len([l for l in logs if l.get('status') == 'ERROR'])
+        st.metric("🔴 Errors", error_count)
+    
+    st.divider()
+    
+    # Analysis type breakdown
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Pie chart - logs by type
+        type_counts = {}
+        for log in logs:
+            atype = log.get('analysis_type', 'UNKNOWN')
+            type_counts[atype] = type_counts.get(atype, 0) + 1
+        
+        if type_counts:
+            fig = px.pie(
+                values=list(type_counts.values()),
+                names=list(type_counts.keys()),
+                title="Logs by Analysis Type",
+                color_discrete_sequence=px.colors.qualitative.Set2
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Bar chart - logs by status
+        status_counts = {}
+        for log in logs:
+            astatus = log.get('status', 'UNKNOWN')
+            status_counts[astatus] = status_counts.get(astatus, 0) + 1
+        
+        if status_counts:
+            colors = {"SUCCESS": "#2ed573", "WARNING": "#ffa502", "ERROR": "#ff4757"}
+            fig = px.bar(
+                x=list(status_counts.keys()),
+                y=list(status_counts.values()),
+                title="Logs by Status",
+                labels={"x": "Status", "y": "Count"},
+                color=list(status_counts.keys()),
+                color_discrete_map=colors
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    
+    st.divider()
+    
+    # Detailed logs table
+    st.subheader("📋 Detailed Logs")
+    
+    log_data = []
+    for log in logs:
+        status_emoji = "✅" if log.get('status') == 'SUCCESS' else ("⚠️" if log.get('status') == 'WARNING' else "🔴")
+        
+        log_data.append({
+            "📅 Time": log.get('timestamp', 'N/A'),
+            "📍 Symbol": log.get('symbol', '—'),
+            "📊 Type": log.get('analysis_type', 'N/A'),
+            "Status": status_emoji + " " + log.get('status', 'N/A'),
+            "📝 Message": log.get('message', ''),
+            "📌 Details": str(log.get('details', {})) if log.get('details') else "—"
+        })
+    
+    df = pd.DataFrame(log_data)
+    st.dataframe(df, use_container_width=True, height=600)
+    
+    # Download logs as CSV
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label="📥 Download Logs (CSV)",
+        data=csv,
+        file_name=f"analysis_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
 # ========== STATS TAB ==========
 def render_statistics():
     """Show overall statistics"""
@@ -486,11 +637,12 @@ render_header()
 st.divider()
 
 # Main tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Dashboard",
     "📈 Trades",
     "🤖 AI Decisions",
     "🌍 Symbols",
+    "📝 Analysis Logs",
     "📉 Statistics"
 ])
 
@@ -507,6 +659,9 @@ with tab4:
     render_symbols()
 
 with tab5:
+    render_analysis_logs()
+
+with tab6:
     render_statistics()
 
 # Footer

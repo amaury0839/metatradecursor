@@ -12,6 +12,7 @@ from app.core.scheduler import TradingScheduler
 from app.trading.mt5_client import get_mt5_client
 from app.trading.portfolio import get_portfolio_manager
 from app.core.logger import setup_logger
+from app.core.analysis_logger import get_analysis_logger
 from app.main import main_trading_loop
 
 logger = setup_logger("api_server")
@@ -226,6 +227,24 @@ async def get_symbols():
     mt5 = get_mt5_client()
     symbols = mt5.get_symbols()
     return {"symbols": symbols}
+
+
+@app.get("/logs/analysis")
+async def get_analysis_logs(
+    symbol: Optional[str] = None,
+    analysis_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100
+):
+    """Get analysis logs with optional filters"""
+    logger = get_analysis_logger()
+    logs = logger.get_logs(
+        symbol=symbol,
+        analysis_type=analysis_type,
+        status=status,
+        limit=limit
+    )
+    return {"logs": logs, "total": len(logs)}
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000):
