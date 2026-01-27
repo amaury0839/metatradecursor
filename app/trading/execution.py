@@ -48,9 +48,10 @@ def min_stop_distance(symbol: str) -> float:
     if not info:
         return 0.0001
     
-    point = info.get('point', 0.0001)
-    stops = (info.get('trade_stops_level', 0) or 0) * point
-    freeze = (info.get('trade_freeze_level', 0) or 0) * point
+    # SymbolInfo object has attributes, not dict keys
+    point = getattr(info, 'point', 0.0001)
+    stops = (getattr(info, 'trade_stops_level', 0) or 0) * point
+    freeze = (getattr(info, 'trade_freeze_level', 0) or 0) * point
     
     # Buffer defensivo (spread + latencia)
     return max(stops, freeze) * 1.2
@@ -96,7 +97,7 @@ def norm(symbol: str, price: float) -> float:
     info = mt5.symbol_info(symbol)
     if not info:
         return price
-    digits = info.get('digits', 5)
+    digits = getattr(info, 'digits', 5)
     return round(price, digits)
 
 
