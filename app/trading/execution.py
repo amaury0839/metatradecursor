@@ -34,6 +34,14 @@ logger = setup_logger("execution")
 
 # ✅ HELPER FUNCTIONS (pragmatic validation)
 
+def sym_info(symbol: str):
+    """Get symbol_info as object plus dict for safe access"""
+    info = mt5.symbol_info(symbol)
+    if info is None:
+        raise RuntimeError(f"Symbol info not found: {symbol}")
+    return info, info._asdict()
+
+
 def get_bid_ask(symbol: str) -> Tuple[float, float]:
     """Get live BID/ASK for symbol"""
     t = mt5.symbol_info_tick(symbol)
@@ -44,14 +52,14 @@ def get_bid_ask(symbol: str) -> Tuple[float, float]:
 
 def min_stop_distance(symbol: str) -> float:
     """Calculate minimum stop distance = max(stops_level, freeze_level) * 1.2 buffer"""
-    info = mt5.symbol_info(symbol)
-    if not info:
+    try:
+        _, d = sym_info(symbol)
+    except RuntimeError:
         return 0.0001
     
-    # SymbolInfo object has attributes, not dict keys
-    point = getattr(info, 'point', 0.0001)
-    stops = (getattr(info, 'trade_stops_level', 0) or 0) * point
-    freeze = (getattr(info, 'trade_freeze_level', 0) or 0) * point
+    point = d.get("point", 0.0001)
+    stops = (d.get("trade_stops_level", 0) or 0) * point
+    freeze = (d.get("trade_freeze_level", 0) or 0) * point
     
     # Buffer defensivo (spread + latencia)
     return max(stops, freeze) * 1.2
@@ -94,10 +102,11 @@ def validate_stops_live(symbol: str, side: str, sl: float, tp: float) -> Tuple[b
 
 def norm(symbol: str, price: float) -> float:
     """Normalizar precio a DIGITS exactos del símbolo"""
-    info = mt5.symbol_info(symbol)
-    if not info:
+    try:
+        _, d = sym_info(symbol)
+    except RuntimeError:
         return price
-    digits = getattr(info, 'digits', 5)
+    digits = d.get("digits", 5)
     return round(price, digits)
 
 
@@ -291,6 +300,12 @@ class ExecutionManager:
     ) -> Tuple[Optional[float], Optional[float]]:
         """Adjust SL/TP to satisfy broker stop level constraints and avoid retcode 10016."""
         try:
+            # accept dict or SymbolInfo
+            if not isinstance(symbol_info, dict):
+                try:
+                    symbol_info = symbol_info._asdict()
+                except Exception:
+                    symbol_info = {}
             point = symbol_info.get('point', 0.0001)
             min_points = symbol_info.get('trade_stops_level', symbol_info.get('stops_level', 0)) or 0
             min_dist = min_points * point
