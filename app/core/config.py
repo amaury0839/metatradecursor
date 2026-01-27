@@ -24,25 +24,31 @@ class TradingConfig(BaseSettings):
     timezone: str = Field("America/New_York", alias="TIMEZONE")
     polling_interval_seconds: int = Field(30, alias="POLLING_INTERVAL_SECONDS")
     
-    # Default symbols - Forex + Crypto
+    # Default symbols - 50 Forex + Crypto pairs
     default_symbols: List[str] = [
-        # Forex pairs
-        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-        # Cryptocurrencies (24/7 trading)
-        "BTCUSD", "ETHUSD"
+        # Major Forex Pairs (10)
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP",
+        # Minor Forex Pairs (10)
+        "EURAUD", "EURCAD", "EURNZD", "GBPAUD", "GBPCAD", "GBPNZD", "AUDCAD", "AUDNZD", "CADCHF", "CHFJPY",
+        # Exotic Forex Pairs (5)
+        "USDSEK", "USDNOK", "USDHKD", "USDSGD", "USDZAR",
+        # Cryptocurrencies (15) - 24/7 trading
+        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "ADAUSD", "DOGEUSD", "XRPUSD", "DOTUSD", "LTCUSD", "AVAXUSD",
+        "MATICUSD", "LINKUSD", "UNIUSD", "FTMUSD", "ARBUSD"
     ]
     default_timeframe: str = "M15"
     
     # Risk defaults
     # Aggressive but bounded defaults (can be overridden via .env)
-    default_risk_per_trade: float = Field(5.0, alias="DEFAULT_RISK_PER_TRADE")
-    default_max_daily_loss: float = Field(6.0, alias="DEFAULT_MAX_DAILY_LOSS")
-    default_max_drawdown: float = Field(12.0, alias="DEFAULT_MAX_DRAWDOWN")
-    default_max_positions: int = Field(3, alias="DEFAULT_MAX_POSITIONS")
+    default_risk_per_trade: float = Field(2.0, alias="DEFAULT_RISK_PER_TRADE")  # Reduced for more positions
+    default_max_daily_loss: float = Field(8.0, alias="DEFAULT_MAX_DAILY_LOSS")
+    default_max_drawdown: float = Field(15.0, alias="DEFAULT_MAX_DRAWDOWN")
+    default_max_positions: int = Field(25, alias="DEFAULT_MAX_POSITIONS")  # Increased to 25 positions
     
     # Crypto-specific (can trade 24/7)
     crypto_symbols: List[str] = [
-        "BTCUSD", "ETHUSD", "BNBUSD", "ADAUSD", "DOGEUSD", "XRPUSD"
+        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "ADAUSD", "DOGEUSD", "XRPUSD", "DOTUSD", "LTCUSD", "AVAXUSD",
+        "MATICUSD", "LINKUSD", "UNIUSD", "FTMUSD", "ARBUSD"
     ]
     enable_crypto_trading: bool = Field(True, alias="ENABLE_CRYPTO_TRADING")
     

@@ -51,6 +51,128 @@ class RiskManager:
         self.trading_hours_start = time(0, 0)
         self.trading_hours_end = time(23, 59)
     
+    def compute_valid_stops(
+        self, 
+        symbol: str, 
+        entry_price: float, 
+        atr: float, 
+        direction: str
+    ) -> Tuple[float, float]:
+        """
+        Calcula SL/TP válidos respetando límites del broker
+        
+        Args:
+            symbol: Símbolo
+            entry_price: Precio de entrada
+            atr: ATR actual
+            direction: "BUY" o "SELL"
+            
+        Returns:
+            Tuple (sl_price, tp_price)
+        """
+        info = self.mt5.get_symbol_info(symbol)
+        if not info:
+            logger.warning(f"Cannot get symbol info for {symbol}, using defaults")
+            # Fallback con valores conservadores
+            sl_dist = atr * self.ATR_MULTIPLIER_SL
+            tp_dist = atr * self.ATR_MULTIPLIER_TP
+            if direction == "BUY":
+                return entry_price - sl_dist, entry_price + tp_dist
+            else:
+                return entry_price + sl_dist, entry_price - tp_dist
+        
+        # ✅ PASO 1: Usar DIGITS en lugar de POINT
+        digits = info.get('digits', 5)
+        point = 10 ** (-digits)  # Calcular desde digits
+        
+        # Stop mínimo permitido por el broker
+        trade_stops_level = info.get('trade_stops_level', 0)
+        min_stop = trade_stops_level * point
+        
+        # Distancias dinámicas (siempre mayores al mínimo del broker)
+        sl_dist = max(atr * self.ATR_MULTIPLIER_SL, min_stop * 1.2)
+        tp_dist = max(atr * self.ATR_MULTIPLIER_TP, min_stop * 1.5)
+        
+        # Alinear a tick size para evitar errores de precisión
+        tick = info.get('trade_tick_size', point)
+        if tick > 0:
+            sl_dist = round(sl_dist / tick) * tick
+            tp_dist = round(tp_dist / tick) * tick
+        
+        # Calcular precios según dirección
+        if direction == "BUY":
+            sl = entry_price - sl_dist
+            tp = entry_price + tp_dist
+        else:
+            sl = entry_price + sl_dist
+            tp = entry_price - tp_dist
+        
+        # ✅ Redondear a DIGITS exactos para normalización
+        sl = round(sl, digits)
+        tp = round(tp, digits)
+        
+        logger.info(
+            f"{symbol} computed stops (digits={digits}): entry={entry_price:.{digits}f}, "
+            f"SL={sl:.{digits}f} (dist={sl_dist:.{digits}f}), TP={tp:.{digits}f} "
+            f"(dist={tp_dist:.{digits}f}), min_stop={min_stop:.{digits}f}, "
+            f"tick={tick:.{digits}f}, freeze_level={info.get('trade_freeze_level', 0)}"
+        )
+        
+        return sl, tp
+    
+    def validate_stops(
+        self, 
+        symbol: str, 
+        price: float, 
+        sl: float, 
+        tp: float,
+        direction: str
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Valida que SL/TP cumplan con requisitos del broker ANTES de enviar orden
+        
+        Args:
+            symbol: Símbolo
+            price: Precio de entrada
+            sl: Stop loss
+            tp: Take profit
+            direction: "BUY" o "SELL"
+            
+        Returns:
+            Tuple (válido, mensaje_error)
+        """
+        info = self.mt5.get_symbol_info(symbol)
+        if not info:
+            return False, f"Cannot get symbol info for {symbol}"
+        
+        point = info.get('point', 0.00001)
+        trade_stops_level = info.get('trade_stops_level', 0)
+        min_stop = trade_stops_level * point
+        
+        # Validar distancia SL
+        sl_distance = abs(price - sl)
+        if sl_distance < min_stop:
+            return False, f"SL too close: {sl_distance:.5f} < {min_stop:.5f}"
+        
+        # Validar distancia TP
+        tp_distance = abs(price - tp)
+        if tp_distance < min_stop:
+            return False, f"TP too close: {tp_distance:.5f} < {min_stop:.5f}"
+        
+        # Validar que SL/TP estén en la dirección correcta
+        if direction == "BUY":
+            if sl >= price:
+                return False, f"BUY: SL must be below entry ({sl:.5f} >= {price:.5f})"
+            if tp <= price:
+                return False, f"BUY: TP must be above entry ({tp:.5f} <= {price:.5f})"
+        else:  # SELL
+            if sl <= price:
+                return False, f"SELL: SL must be above entry ({sl:.5f} <= {price:.5f})"
+            if tp >= price:
+                return False, f"SELL: TP must be below entry ({tp:.5f} >= {price:.5f})"
+        
+        return True, None
+    
     def check_all_risk_conditions(
         self, 
         symbol: str, 

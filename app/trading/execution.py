@@ -8,6 +8,7 @@ from app.core.logger import setup_logger
 from app.trading.mt5_client import get_mt5_client
 from app.trading.risk import get_risk_manager
 from app.trading.market_status import get_market_status
+from app.trading.data import get_data_provider
 
 # Try to import MetaTrader5 - optional dependency
 try:
@@ -29,6 +30,74 @@ except ImportError:
     mt5 = MockMT5()  # type: ignore
 
 logger = setup_logger("execution")
+
+
+# ✅ HELPER FUNCTIONS (pragmatic validation)
+
+def get_bid_ask(symbol: str) -> Tuple[float, float]:
+    """Get live BID/ASK for symbol"""
+    t = mt5.symbol_info_tick(symbol)
+    if t is None:
+        return None, None
+    return t.bid, t.ask
+
+
+def min_stop_distance(symbol: str) -> float:
+    """Calculate minimum stop distance = max(stops_level, freeze_level) * 1.2 buffer"""
+    info = mt5.symbol_info(symbol)
+    if not info:
+        return 0.0001
+    
+    point = info.get('point', 0.0001)
+    stops = (info.get('trade_stops_level', 0) or 0) * point
+    freeze = (info.get('trade_freeze_level', 0) or 0) * point
+    
+    # Buffer defensivo (spread + latencia)
+    return max(stops, freeze) * 1.2
+
+
+def validate_stops_live(symbol: str, side: str, sl: float, tp: float) -> Tuple[bool, Optional[str]]:
+    """
+    Valida SL/TP CONTRA BID/ASK en vivo
+    
+    Args:
+        symbol: Symbol name
+        side: "BUY" o "SELL"
+        sl: Stop loss price
+        tp: Take profit price
+    
+    Returns:
+        Tuple (valid, error_message)
+    """
+    bid, ask = get_bid_ask(symbol)
+    if bid is None or ask is None:
+        return False, "Cannot get BID/ASK"
+    
+    m = min_stop_distance(symbol)
+    
+    if side == "BUY":
+        # BUY: SL debe estar debajo de BID, TP arriba de ASK
+        if sl >= bid - m:
+            return False, f"SL too close to BID ({sl:.5f} >= {bid-m:.5f})"
+        if tp <= ask + m:
+            return False, f"TP too close to ASK ({tp:.5f} <= {ask+m:.5f})"
+    else:
+        # SELL: SL debe estar arriba de ASK, TP debajo de BID
+        if sl <= ask + m:
+            return False, f"SL too close to ASK ({sl:.5f} <= {ask+m:.5f})"
+        if tp >= bid - m:
+            return False, f"TP too close to BID ({tp:.5f} >= {bid-m:.5f})"
+    
+    return True, None
+
+
+def norm(symbol: str, price: float) -> float:
+    """Normalizar precio a DIGITS exactos del símbolo"""
+    info = mt5.symbol_info(symbol)
+    if not info:
+        return price
+    digits = info.get('digits', 5)
+    return round(price, digits)
 
 
 class ExecutionManager:
@@ -69,22 +138,19 @@ class ExecutionManager:
                 f"[PAPER] Would place {order_type} order: {symbol}, "
                 f"volume={volume}, sl={sl_price}, tp={tp_price}"
             )
-            # Simulate order
             return True, {
                 "order": 12345,
-                "retcode": 10009,  # TRADE_RETCODE_DONE
+                "retcode": mt5.TRADE_RETCODE_DONE,
                 "volume": volume,
                 "price": self._get_simulated_price(symbol, order_type),
                 "comment": comment,
                 "request_id": 0,
             }, None
         
-        # LIVE mode - execute real order
         if not self.mt5.is_connected():
             return False, None, "MT5 not connected"
         
         if not MT5_AVAILABLE:
-            # Demo mode - simulate order
             tick = self.mt5.get_tick(symbol)
             price = tick.get('ask', 0) if order_type.upper() == "BUY" else tick.get('bid', 0) if tick else 0
             return True, {
@@ -101,62 +167,92 @@ class ExecutionManager:
             if not symbol_info:
                 return False, None, f"Cannot get symbol info for {symbol}"
             
-            # Check if market is open for trading
             if not self.market_status.is_forex_market_open(symbol):
                 status_text = self.market_status.get_market_status_text(symbol)
                 logger.warning(f"Cannot trade {symbol}: {status_text}")
-                return False, None, f"{status_text} - Order rejected by market status"
+                return False, None, f"{status_text} - Order rejected"
             
-            # Prepare order request
+            # ✅ 1️⃣ Obtener BID/ASK en vivo
+            bid, ask = get_bid_ask(symbol)
+            if bid is None:
+                return False, None, f"Cannot get BID/ASK for {symbol}"
+            
             if order_type.upper() == "BUY":
                 order_type_mt5 = mt5.ORDER_TYPE_BUY
-                price = mt5.symbol_info_tick(symbol).ask
+                price = ask
             elif order_type.upper() == "SELL":
                 order_type_mt5 = mt5.ORDER_TYPE_SELL
-                price = mt5.symbol_info_tick(symbol).bid
+                price = bid
             else:
                 return False, None, f"Invalid order type: {order_type}"
-
-            # Enforce broker minimum stop distances to avoid retcode 10016
-            sl_price, tp_price = self._enforce_min_stop_distance(
-                symbol=symbol,
-                order_type=order_type,
-                entry_price=price,
-                sl_price=sl_price,
-                tp_price=tp_price,
-                symbol_info=symbol_info,
-            )
             
-            # Normalize volume to broker constraints before sending
+            # ✅ 2️⃣ Normalizar TODO a DIGITS
+            price = norm(symbol, price)
+            if sl_price:
+                sl_price = norm(symbol, sl_price)
+            if tp_price:
+                tp_price = norm(symbol, tp_price)
+            
+            # ✅ 1️⃣ Validar SL/TP CONTRA BID/ASK en vivo
+            if sl_price and tp_price:
+                valid, error = validate_stops_live(symbol, order_type.upper(), sl_price, tp_price)
+                if not valid:
+                    logger.warning(f"⚠️ {symbol}: {error}")
+                    return False, None, f"Stop validation failed: {error}"
+            
+            # Normalize volume
             try:
                 volume = self.risk.normalize_volume(symbol, volume)
             except Exception:
                 pass
-
+            
+            # ✅ 3️⃣ Preparar request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": symbol,
                 "volume": volume,
                 "type": order_type_mt5,
                 "price": price,
-                "deviation": 20,  # Slippage in points
-                "magic": 234000,  # Magic number for bot identification
+                "deviation": 20,
+                "magic": 234000,
                 "comment": comment,
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": mt5.ORDER_FILLING_IOC,
             }
             
-            # Add SL/TP if provided
             if sl_price:
                 request["sl"] = sl_price
             if tp_price:
                 request["tp"] = tp_price
             
-            # Send order
+            # ✅ 3️⃣ order_check() + LOGGING OBLIGATORIO
+            logger.info(f"\n🔍 order_check() {symbol}:")
+            logger.info(f"  Type: {order_type.upper()}, Volume: {volume}")
+            logger.info(f"  Price: {price}, SL: {sl_price}, TP: {tp_price}")
+            logger.info(f"  REQUEST: {request}")
+            
+            check = mt5.order_check(request)
+            
+            logger.info(f"🔍 order_check() RESPONSE:")
+            if check:
+                logger.info(f"  Retcode: {check.retcode}, Comment: {check.comment}")
+                logger.info(f"  Balance: {check.balance}, Profit: {check.profit}")
+            else:
+                logger.error(f"  ❌ order_check() returned None")
+            
+            # Si order_check falla → error claro
+            if check is None or check.retcode != mt5.TRADE_RETCODE_DONE:
+                error_msg = check.comment if check else "order_check returned None"
+                logger.error(f"❌ Order validation failed: {error_msg}")
+                return False, None, f"Order check failed: {error_msg}"
+            
+            # ✅ order_check OK → enviar
+            logger.info(f"✅ order_check passed. Sending order...")
             result = mt5.order_send(request)
             
             if result is None:
                 error = mt5.last_error()
+                logger.error(f"❌ order_send() failed: {error}")
                 return False, None, f"Order send failed: {error}"
             
             result_dict = result._asdict()
@@ -285,6 +381,39 @@ class ExecutionManager:
                 return False, f"Close rejected: {result.retcode} - {result.comment}"
             
             logger.info(f"Position {ticket} closed successfully")
+            
+            # Update trade record in database with profit
+            try:
+                from app.core.database import get_database
+                db = get_database()
+                
+                # Get the closed position from history with profit
+                from datetime import datetime, timedelta
+                now = datetime.now()
+                # Look back 7 days to find the closing deal
+                seven_days_ago = now - timedelta(days=7)
+                
+                deals = mt5.history_deals_get(seven_days_ago, now)
+                if deals:
+                    # Find the closing deal for this position (most recent exit)
+                    matching_deals = [d for d in deals if d.position_id == ticket and d.entry == 1]
+                    if matching_deals:
+                        # Get the most recent closing deal
+                        deal = matching_deals[-1]
+                        trade_info = {
+                            'close_price': deal.price,
+                            'close_timestamp': datetime.fromtimestamp(deal.time).isoformat(),
+                            'profit': deal.profit,
+                            'commission': deal.commission,
+                            'swap': deal.swap,
+                            'status': 'closed'
+                        }
+                        db.update_trade(ticket, trade_info)
+                        logger.info(f"✅ Trade {ticket} updated: profit=${deal.profit:.2f}, commission=${deal.commission:.2f}")
+            except Exception as e:
+                logger.warning(f"Could not update trade profit from MT5: {e}. Trade closed but profit not logged.")
+                # This is not critical - trade is still closed
+            
             return True, None
             
         except Exception as e:

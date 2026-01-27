@@ -235,17 +235,35 @@ class DecisionEngine:
             equity = account_info.get("equity", 1000) if account_info else 1000
             risk_amount = equity * (min(self.risk.risk_per_trade_pct, self.risk.max_trade_risk_pct) / 100)
 
-            # ATR-based stops with broker min stop enforcement
+            # Usar ATR para calcular stops válidos
             atr = float(indicators.get("atr", 0) or 0)
-            min_stop = self.risk.get_broker_min_stop_distance(symbol)
-            atr_sl = self.risk.calculate_stop_loss_atr(atr) if atr > 0 else self.risk.get_default_stop_distance(current_price, atr)
-            atr_tp = self.risk.calculate_take_profit_atr(atr) if atr > 0 else atr_sl * 2
-            sl_dist = max(atr_sl, min_stop)
-            tp_dist = max(atr_tp, min_stop * 1.2)
-
-            is_buy = action == "BUY"
-            sl_price = current_price - sl_dist if is_buy else current_price + sl_dist
-            tp_price = current_price + tp_dist if is_buy else current_price - tp_dist
+            if atr <= 0:
+                # Fallback: usar un ATR por defecto basado en el precio
+                atr = current_price * 0.01
+            
+            # NUEVA FUNCIÓN: Calcular SL/TP válidos automáticamente
+            sl_price, tp_price = self.risk.compute_valid_stops(
+                symbol=symbol,
+                entry_price=current_price,
+                atr=atr,
+                direction=action
+            )
+            
+            # Validar stops antes de continuar
+            valid, error_msg = self.risk.validate_stops(
+                symbol=symbol,
+                price=current_price,
+                sl=sl_price,
+                tp=tp_price,
+                direction=action
+            )
+            
+            if not valid:
+                logger.warning(f"Invalid stops for {symbol}: {error_msg}. Forcing HOLD.")
+                decision.action = "HOLD"
+                decision.risk_ok = False
+                decision.reasoning = f"Stops validation failed: {error_msg}"
+                return decision
 
             # Position sizing, then cap by risk/margin and normalize
             volume = self.risk.calculate_position_size(
