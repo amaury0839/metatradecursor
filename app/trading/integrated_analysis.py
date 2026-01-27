@@ -9,6 +9,7 @@ from app.core.config import get_config
 from app.trading.market_status import get_market_status
 from app.ai.smart_decision_router import make_smart_decision
 from app.core.database import get_database_manager
+from app.ai.enhanced_decision import get_enhanced_decision_engine
 
 logger = setup_logger("integrated_analysis")
 
@@ -172,12 +173,33 @@ class IntegratedAnalyzer:
             except Exception as e:
                 logger.warning(f"AI decision failed for {symbol}: {e}")
         
-        # 4. Calculate combined score
-        combined_score = self._calculate_combined_score(result)
-        result["combined_score"] = combined_score
-        result["signal"], result["confidence"] = self._get_integrated_signal(
-            result, combined_score
-        )
+        # 4. Calculate combined score using enhanced engine (AI as score, no veto)
+        try:
+            engine = get_enhanced_decision_engine()
+            tech_sig = (result["technical"] or {}).get("signal", "HOLD")
+            ai_action = (result["ai_decision"] or {}).get("action", "HOLD")
+            ai_conf = float((result["ai_decision"] or {}).get("confidence", 0.0) or 0.0)
+            sent_score = 0.0
+            if result["sentiment"] and result["sentiment"].get("score") is not None:
+                sent_score = float(result["sentiment"]["score"])
+            final_score_abs, action = engine.calculate_combined_score(
+                technical_signal=tech_sig,
+                ai_confidence=ai_conf,
+                ai_action=ai_action,
+                sentiment_score=sent_score,
+            )
+            # Store signed combined score for UI (-1..+1)
+            signed = final_score_abs if action == "BUY" else (-final_score_abs if action == "SELL" else 0.0)
+            result["combined_score"] = signed
+            result["signal"] = action
+            result["confidence"] = final_score_abs
+        except Exception as e:
+            logger.warning(f"Enhanced scoring failed, falling back: {e}")
+            combined_score = self._calculate_combined_score(result)
+            result["combined_score"] = combined_score
+            result["signal"], result["confidence"] = self._get_integrated_signal(
+                result, combined_score
+            )
         
         # 5. Save analysis to database
         try:

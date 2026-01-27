@@ -244,6 +244,36 @@ class RiskManager:
             return self.calculate_stop_loss_atr(atr_value)
         return max(entry_price * self.default_stop_loss_pct, 0.0001)
 
+    def get_broker_min_stop_distance(self, symbol: str) -> float:
+        """Return broker-enforced minimum stop distance in price units."""
+        try:
+            info = self.mt5.get_symbol_info(symbol)
+            if not info:
+                return 0.0
+            points = info.get('trade_stops_level', info.get('stops_level', 0)) or 0
+            point = info.get('point', 0.0001)
+            return float(points) * float(point)
+        except Exception:
+            return 0.0
+
+    def normalize_volume(self, symbol: str, requested_volume: float) -> float:
+        """Normalize volume to broker limits and volume_step.
+
+        Applies: volume = clamp(volume_min, requested, volume_max) and rounds to step.
+        """
+        try:
+            info = self.mt5.get_symbol_info(symbol)
+            if not info:
+                return max(0.0, requested_volume)
+            vmin = float(info.get('volume_min', 0.01))
+            vmax = float(info.get('volume_max', 100.0))
+            step = float(info.get('volume_step', 0.01)) or 0.01
+            vol = max(vmin, min(float(requested_volume), vmax))
+            vol = round(vol / step) * step
+            return max(0.0, vol)
+        except Exception:
+            return max(0.0, requested_volume)
+
     def cap_volume_by_risk(
         self,
         symbol: str,
@@ -274,7 +304,8 @@ class RiskManager:
 
         # Cap adicional por margen disponible
         margin_capped = self.cap_volume_by_margin(symbol, entry_price, capped)
-        return margin_capped
+        # Ensure final normalization to broker constraints
+        return self.normalize_volume(symbol, margin_capped)
 
     def cap_volume_by_margin(self, symbol: str, entry_price: float, requested_volume: float) -> float:
         """Reduce volumen si el margen libre no alcanza (usa 50% del margen libre como techo)."""

@@ -750,12 +750,13 @@ def render_logs():
 
 def main():
     """Main app"""
-    # Enhanced tabs with history
-    tab_dashboard, tab_analysis, tab_history, tab_analytics, tab_config, tab_logs = st.tabs([
+    # Enhanced tabs with history and backtesting
+    tab_dashboard, tab_analysis, tab_history, tab_analytics, tab_backtest, tab_config, tab_logs = st.tabs([
         "📊 Dashboard",
         "📈 Analysis",
         "📚 History",
         "📉 Analytics",
+        "🧪 Backtest",
         "⚙️ Configuration",
         "📋 Logs"
     ])
@@ -805,6 +806,14 @@ def main():
         except Exception as e:
             st.error(f"Error loading analytics: {e}")
             logger.error(f"Analytics error: {e}", exc_info=True)
+    
+    with tab_backtest:
+        try:
+            from app.ui.pages_backtest import render_backtest
+            render_backtest()
+        except Exception as e:
+            st.error(f"Error loading backtest: {e}")
+            logger.error(f"Backtest error: {e}", exc_info=True)
     
     with tab_config:
         render_configuration()

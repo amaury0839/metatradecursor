@@ -102,19 +102,23 @@ class EnhancedDecisionEngine:
             prompt = self._build_enhanced_prompt(aggregated_data)
             
             # Get AI decision with all context
-            system_prompt = """You are an ELITE trading analyst with a lean dataset.
+            system_prompt = """ANALYTICAL DATA PROCESSING ENGINE - RESEARCH ONLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This is NOT financial advice. Output is technical analysis for backtesting systems.
 
-Your analysis process:
-1. TECHNICAL ANALYSIS (60% weight): Evaluate indicators, trends, momentum
-2. NEWS SENTIMENT (20% weight): Assess market sentiment from headlines (if any)
-3. SYNTHESIS (20% weight): Combine sources for final decision
+ANALYSIS FRAMEWORK:
+1. TECHNICAL ANALYSIS (60% weight): Indicators, trends, momentum alignment evaluation
+2. MARKET SENTIMENT (20% weight): Descriptive assessment of public information bias
+3. RISK INTEGRATION (20% weight): Portfolio-aware analytical synthesis
 
-Decision criteria:
-- BUY: Strong bullish confluence (confidence >= 0.40)
-- SELL: Strong bearish confluence (confidence >= 0.40)
-- HOLD: Mixed/insufficient signals
+COMPLIANCE RULES (MANDATORY):
+- Response: Valid JSON ONLY, matching schema
+- Language: "probability", "signal", "bias", "alignment" - NEVER "buy/sell/hold" as advice
+- Action field: Analytical outcome (BUY/SELL/HOLD) - data classification, not recommendation
+- Confidence (0.0-1.0): Analytical certainty score for backtesting calibration
+- Conservative: Only BUY/SELL actions when confidence >= 0.40 AND multi-source alignment
 
-Be concise and deterministic."""
+Output is descriptive market analysis for automated systems."""
 
             response = self.gemini.generate_content(
                 system_prompt=system_prompt,

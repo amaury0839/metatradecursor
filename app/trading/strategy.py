@@ -63,10 +63,11 @@ class TradingStrategy:
                 "ema_slow": 20,
                 "rsi_period": 14,
                 "atr_period": 14,
-                "rsi_buy": 50,
-                "rsi_sell": 50,
-                "rsi_overbought": 70,
-                "rsi_oversold": 30,
+                # Make scalping more decisive: slightly easier entries, wider extremes
+                "rsi_buy": 48,
+                "rsi_sell": 52,
+                "rsi_overbought": 80,
+                "rsi_oversold": 20,
                 "volatility_floor": 0.0005,  # ATR/close mínimo para usar scalping
             },
             "SWING": {
@@ -260,6 +261,18 @@ class TradingStrategy:
             if latest['rsi'] <= params['rsi_oversold']:
                 signal = "HOLD"
                 reasons.append("Scalping: RSI sobrevendido, pausa")
+
+            # Permitir entradas por pullback en tendencia
+            # Buy: tendencia alcista y RSI en zona neutral con retroceso respecto al previo
+            if signal == "HOLD" and latest['trend_bullish']:
+                if params['rsi_oversold'] < latest['rsi'] < params['rsi_overbought'] and latest['rsi'] < indicators['rsi_prev']:
+                    signal = "BUY"
+                    reasons.append("Scalping: pullback en tendencia alcista (RSI neutral y retroceso)")
+            # Sell: tendencia bajista y RSI neutral con rebote respecto al previo
+            if signal == "HOLD" and latest['trend_bearish']:
+                if params['rsi_oversold'] < latest['rsi'] < params['rsi_overbought'] and latest['rsi'] > indicators['rsi_prev']:
+                    signal = "SELL"
+                    reasons.append("Scalping: pullback en tendencia bajista (RSI neutral y rebote)")
 
         # Swing rules: seguir tendencia + RSI moderado
         elif profile == "SWING":

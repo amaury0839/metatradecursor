@@ -127,6 +127,12 @@ class ExecutionManager:
                 symbol_info=symbol_info,
             )
             
+            # Normalize volume to broker constraints before sending
+            try:
+                volume = self.risk.normalize_volume(symbol, volume)
+            except Exception:
+                pass
+
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": symbol,

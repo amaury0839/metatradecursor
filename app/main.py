@@ -76,6 +76,7 @@ def main_trading_loop():
         decision_engine = DecisionEngine()
         config = get_config()
         analysis_logger = get_analysis_logger()
+        db = get_database_manager()  # Add database manager for saving analyses
         
         # Check kill switch
         if state.is_kill_switch_active():
@@ -129,6 +130,12 @@ def main_trading_loop():
                 # Get current analysis for position symbol
                 pos_analysis = integrated_analyzer.analyze_symbol(pos_symbol, timeframe)
                 current_signal = pos_analysis["signal"]
+                
+                # Save analysis to database for logs UI
+                try:
+                    db.save_analysis(pos_analysis)
+                except Exception as e:
+                    logger.warning(f"Failed to save position analysis to DB: {e}")
                 
                 # Decisión de cierre basada en señal contraria o baja confianza
                 should_close = False
@@ -211,6 +218,12 @@ def main_trading_loop():
                 
                 # === INTEGRATED ANALYSIS (Technical + Sentiment + Cache) ===
                 analysis = integrated_analyzer.analyze_symbol(symbol, timeframe)
+                
+                # Save analysis to database for logs UI
+                try:
+                    db.save_analysis(analysis)
+                except Exception as e:
+                    logger.warning(f"Failed to save analysis to DB: {e}")
                 
                 # Log all available sources
                 for source in analysis["available_sources"]:

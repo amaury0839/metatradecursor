@@ -23,7 +23,7 @@ Ver [README_LOCAL_VS_CLOUD.md](README_LOCAL_VS_CLOUD.md) para detalles completos
 - ✅ Análisis de sentimiento de noticias
 - ✅ Gestión de riesgo profesional
 - ✅ Auditoría completa de decisiones
-- ✅ Backtesting básico
+- ✅ **Backtesting histórico completo** (NEW!)
 - ✅ API REST para acceso remoto
 
 ## Instalación Rápida
@@ -95,10 +95,55 @@ ngrok http 8000
 # Usar URL de ngrok en Streamlit Cloud
 ```
 
+## 🧪 Backtesting
+
+Test your strategy on historical data before live trading:
+
+### UI (Recommended)
+```bash
+python run_ui_improved.py
+# Navigate to "🧪 Backtest" tab
+```
+
+### CLI
+```bash
+python run_backtest.py \
+  --symbol EURUSD \
+  --timeframe M15 \
+  --start 2024-01-01 \
+  --end 2024-12-31 \
+  --risk-per-trade 2.0 \
+  --plot
+```
+
+### Python API
+```python
+from app.backtest import HistoricalBacktestEngine, HistoricalDataLoader
+from datetime import datetime, timedelta
+
+loader = HistoricalDataLoader()
+data = loader.load_data('EURUSD', 'M15', start_date, end_date)
+
+engine = HistoricalBacktestEngine(initial_balance=10000)
+results = engine.run_backtest(
+    symbol='EURUSD',
+    timeframe='M15',
+    data=data,
+    risk_per_trade=2.0
+)
+
+print(f"Win Rate: {results.win_rate:.1f}%")
+print(f"Profit Factor: {results.profit_factor:.2f}")
+```
+
+See [BACKTEST_QUICKSTART.md](BACKTEST_QUICKSTART.md) for full guide.
+
 ## Documentación
 
+- [QUICK_START.md](QUICK_START.md) - Guía rápida de inicio
+- [BACKTEST_QUICKSTART.md](BACKTEST_QUICKSTART.md) - Backtesting en 60 segundos (NEW!)
+- [BACKTEST_GUIDE.md](BACKTEST_GUIDE.md) - Guía completa de backtesting (NEW!)
 - [README_LOCAL_VS_CLOUD.md](README_LOCAL_VS_CLOUD.md) - Arquitectura detallada
-- [QUICK_START.md](QUICK_START.md) - Guía rápida
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - Guía de despliegue
 - [README_DEMO.md](README_DEMO.md) - Modo demo
 

@@ -235,17 +235,33 @@ class DecisionEngine:
             equity = account_info.get("equity", 1000) if account_info else 1000
             risk_amount = equity * (min(self.risk.risk_per_trade_pct, self.risk.max_trade_risk_pct) / 100)
 
-            atr = indicators.get("atr", 0)
-            stop_distance = self.risk.get_default_stop_distance(current_price, atr)
-            sl_price = current_price - stop_distance if action == "BUY" else current_price + stop_distance
-            tp_price = current_price + (stop_distance * 2) if action == "BUY" else current_price - (stop_distance * 2)
+            # ATR-based stops with broker min stop enforcement
+            atr = float(indicators.get("atr", 0) or 0)
+            min_stop = self.risk.get_broker_min_stop_distance(symbol)
+            atr_sl = self.risk.calculate_stop_loss_atr(atr) if atr > 0 else self.risk.get_default_stop_distance(current_price, atr)
+            atr_tp = self.risk.calculate_take_profit_atr(atr) if atr > 0 else atr_sl * 2
+            sl_dist = max(atr_sl, min_stop)
+            tp_dist = max(atr_tp, min_stop * 1.2)
 
+            is_buy = action == "BUY"
+            sl_price = current_price - sl_dist if is_buy else current_price + sl_dist
+            tp_price = current_price + tp_dist if is_buy else current_price - tp_dist
+
+            # Position sizing, then cap by risk/margin and normalize
             volume = self.risk.calculate_position_size(
                 symbol=symbol,
                 entry_price=current_price,
                 stop_loss_price=sl_price,
                 risk_amount=risk_amount,
             )
+            if volume > 0:
+                volume = self.risk.cap_volume_by_risk(
+                    symbol=symbol,
+                    entry_price=current_price,
+                    stop_loss_price=sl_price,
+                    requested_volume=volume,
+                )
+                volume = self.risk.normalize_volume(symbol, volume)
 
             if volume <= 0:
                 # No sizing possible -> force HOLD to avoid invalid orders
