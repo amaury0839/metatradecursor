@@ -103,14 +103,16 @@ def main_trading_loop():
             if state.current_equity > state.max_equity:
                 state.max_equity = state.current_equity
             account_balance = account_info.get('balance', 0)
+            equity_display = account_info.get('equity', 0)
         else:
             account_balance = 0
+            equity_display = 0
         
         # Get symbols to trade
         symbols = config.trading.default_symbols
         timeframe = config.trading.default_timeframe
         
-        logger.info(f"🎯 Trading loop started: {len(symbols)} symbols, equity=${account_info.get('equity', 0):,.0f}")
+        logger.info(f"Trading loop started: {len(symbols)} symbols, equity=${equity_display:,.0f}")
         
         # ============= STEP 1: REVIEW OPEN POSITIONS =============
         logger.info("=" * 60)

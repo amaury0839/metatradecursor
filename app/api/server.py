@@ -13,7 +13,7 @@ from app.trading.mt5_client import get_mt5_client
 from app.trading.portfolio import get_portfolio_manager
 from app.core.logger import setup_logger
 from app.core.analysis_logger import get_analysis_logger
-from app.main import main_trading_loop
+from app.trading.trading_loop import main_trading_loop
 
 logger = setup_logger("api_server")
 
