@@ -158,21 +158,25 @@ class MT5Client:
     
     def is_connected(self) -> bool:
         """Check if connected to MT5"""
-        if not self.connected:
-            return False
-        
         if not MT5_AVAILABLE:
             return True  # Demo mode - always "connected"
         
-        # Verify connection is still alive
+        # Try to get account info to verify MT5 is running and logged in
         try:
+            # Initialize if needed
+            if not mt5.initialize():
+                # Try anyway - it might already be initialized
+                pass
+            
             account_info = mt5.account_info()
-            if account_info is None:
+            if account_info is not None:
+                self.account_info = account_info._asdict()
+                self.connected = True
+                return True
+            else:
                 self.connected = False
                 return False
-            self.account_info = account_info._asdict()
-            return True
-        except Exception:
+        except Exception as e:
             self.connected = False
             return False
     

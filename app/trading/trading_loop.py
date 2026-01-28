@@ -176,10 +176,13 @@ def main_trading_loop():
                 
                 # Decide if should call AI
                 tech_confidence = analysis.get("technical", {}).get("confidence", 0.0)
+                tech_data = analysis.get("technical", {}).get("data", {})
                 should_call_ai_value, ai_reason = should_call_ai(
-                    signal_direction=signal,
+                    technical_signal=signal,
                     signal_strength=tech_confidence,
-                    indicators=analysis.get("technical", {}).get("data", {})
+                    rsi_value=tech_data.get("rsi", 50.0),
+                    trend_status="bullish" if signal == "BUY" else ("bearish" if signal == "SELL" else "neutral"),
+                    ema_distance=abs(tech_data.get("ema_fast", 0) - tech_data.get("ema_slow", 0)) * 10000
                 )
                 
                 # Make decision
