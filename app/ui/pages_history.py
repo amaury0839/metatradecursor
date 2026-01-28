@@ -376,3 +376,4 @@ def render_trade_history_page():
     
     styled_df = display_df.style.apply(highlight_profit, axis=1)
     st.dataframe(styled_df, width="stretch", height=400)
+

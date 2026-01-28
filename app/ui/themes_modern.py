@@ -311,3 +311,4 @@ def error_box(message: str, title: str = "❌ Error"):
         {message}
     </div>
     """, unsafe_allow_html=True)
+

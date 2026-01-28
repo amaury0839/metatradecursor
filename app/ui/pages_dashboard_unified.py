@@ -221,7 +221,7 @@ def display_open_positions():
     # Style the dataframe
     st.dataframe(
         df,
-        use_container_width=True,
+        width='stretch',
         height=400,
         hide_index=True
     )
@@ -256,7 +256,7 @@ def display_recent_trades():
     if columns_to_show:
         st.dataframe(
             trades_df[columns_to_show],
-            use_container_width=True,
+            width='stretch',
             height=300,
             hide_index=True
         )
@@ -287,7 +287,7 @@ def display_recent_decisions():
     df = pd.DataFrame(decision_data)
     st.dataframe(
         df,
-        use_container_width=True,
+        width='stretch',
         height=300,
         hide_index=True
     )
@@ -334,7 +334,7 @@ def display_equity_curve():
                     height=400,
                 )
                 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 return
     except:
         pass
@@ -384,7 +384,7 @@ def display_pnl_by_symbol():
         showlegend=False,
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def display_risk_status():
@@ -512,3 +512,4 @@ def render_dashboard():
 
 if __name__ == "__main__":
     render_dashboard()
+

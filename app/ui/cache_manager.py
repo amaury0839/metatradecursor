@@ -133,3 +133,4 @@ _historical_cache = HistoricalDataCache()
 def get_historical_cache() -> HistoricalDataCache:
     """Get historical data cache"""
     return _historical_cache
+

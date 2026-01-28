@@ -430,3 +430,4 @@ def render_logs():
         except Exception as e:
             st.error(f"Error loading performance data: {e}")
             logger.error(f"Performance data error: {e}", exc_info=True)
+

@@ -272,3 +272,4 @@ def render_by_type_view(logs):
                         except Exception:
                             st.write(str(log["details"]))
                     detail_idx += 1
+

@@ -239,7 +239,7 @@ class TableComponents:
         
         st.dataframe(
             display_df,
-            use_container_width=True,
+            width='stretch',
             height=400,
         )
     
@@ -259,7 +259,7 @@ class TableComponents:
         
         st.dataframe(
             display_df,
-            use_container_width=True,
+            width='stretch',
             height=300,
         )
 
@@ -369,3 +369,4 @@ def render_header():
         st.markdown("")  # Placeholder
     
     st.divider()
+

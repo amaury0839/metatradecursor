@@ -470,3 +470,4 @@ def render_database_analytics():
             
         except Exception as e:
             st.error(f"Error loading system statistics: {e}")
+

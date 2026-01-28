@@ -187,3 +187,4 @@ def render_config_remote(api_client):
         st.success("✅ Paper trading mode - No real orders will be executed")
     elif mode == "LIVE":
         st.error("⚠️ LIVE MODE - Real orders will be executed!")
+

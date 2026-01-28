@@ -19,7 +19,8 @@ def should_call_ai(
     signal_strength: float,
     rsi_value: float,
     trend_status: str,
-    ema_distance: float
+    ema_distance: float,
+    signal_direction: str = None  # Optional: for debugging/logging
 ) -> Tuple[bool, str]:
     """
     Determine if we should call AI for this signal
@@ -41,6 +42,7 @@ def should_call_ai(
         rsi_value: 0-100
         trend_status: "bullish", "bearish", "neutral"
         ema_distance: Distance between fast/slow EMA in pips
+        signal_direction: Optional (for compatibility/logging)
     
     Returns:
         (should_call, reason)

@@ -206,3 +206,4 @@ def render_risk_local():
             elif portfolio.get_open_positions_count() >= risk.max_positions:
                 risk_status = "⚠️ Max positions"
             st.metric("Risk Status", risk_status)
+

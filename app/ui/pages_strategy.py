@@ -131,3 +131,4 @@ def render_strategy_local():
                     "ATR": indicators.get('atr', 0),
                     "Reasons": indicators.get('signal_reasons', []),
                 })
+

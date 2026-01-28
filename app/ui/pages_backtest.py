@@ -93,7 +93,7 @@ def render_backtest():
         )
     
     # Run backtest button
-    if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
+    if st.button("🚀 Run Backtest", type="primary", width='stretch'):
         run_backtest(
             symbol=symbol,
             timeframe=timeframe,
@@ -211,7 +211,7 @@ def display_results(results):
     st.markdown("---")
     st.subheader("💹 Equity Curve & Drawdown")
     fig_equity = visualizer.plot_equity_curve(results)
-    st.plotly_chart(fig_equity, use_container_width=True)
+    st.plotly_chart(fig_equity, width='stretch')
     
     # Trade analysis
     col1, col2 = st.columns(2)
@@ -219,18 +219,18 @@ def display_results(results):
     with col1:
         st.subheader("📊 Trade Distribution")
         fig_dist = visualizer.plot_trade_distribution(results)
-        st.plotly_chart(fig_dist, use_container_width=True)
+        st.plotly_chart(fig_dist, width='stretch')
     
     with col2:
         st.subheader("🎯 MAE vs MFE")
         fig_mae = visualizer.plot_mae_mfe(results)
-        st.plotly_chart(fig_mae, use_container_width=True)
+        st.plotly_chart(fig_mae, width='stretch')
     
     # Monthly returns
     st.markdown("---")
     st.subheader("📅 Monthly Returns")
     fig_monthly = visualizer.plot_monthly_returns(results)
-    st.plotly_chart(fig_monthly, use_container_width=True)
+    st.plotly_chart(fig_monthly, width='stretch')
     
     # Trade breakdown
     st.markdown("---")
@@ -261,7 +261,7 @@ def display_results(results):
     
     col1, col2 = st.columns(2)
     with col1:
-        st.dataframe(strategy_df, use_container_width=True, hide_index=True)
+        st.dataframe(strategy_df, width='stretch', hide_index=True)
     
     with col2:
         if strategy_stats:
@@ -271,7 +271,7 @@ def display_results(results):
                 data=[go.Pie(labels=strategy_names, values=strategy_counts, hole=0.3)],
                 layout=go.Layout(title="Trade Distribution by Strategy", height=350)
             )
-            st.plotly_chart(fig_strategy, use_container_width=True)
+            st.plotly_chart(fig_strategy, width='stretch')
     
     st.markdown("---")
     st.subheader("🔍 Exit Reason Breakdown")
@@ -290,7 +290,7 @@ def display_results(results):
         for reason, count in sorted(exit_reasons.items(), key=lambda x: x[1], reverse=True)
     ])
     
-    st.dataframe(exit_df, use_container_width=True, hide_index=True)
+    st.dataframe(exit_df, width='stretch', hide_index=True)
     
     # Detailed trade log
     with st.expander("📋 Detailed Trade Log"):
@@ -308,7 +308,7 @@ def display_results(results):
             'Exit Reason': t.exit_reason
         } for t in results.trades])
         
-        st.dataframe(trades_df, use_container_width=True, hide_index=True)
+        st.dataframe(trades_df, width='stretch', hide_index=True)
     
     # Export buttons
     st.markdown("---")
@@ -348,3 +348,4 @@ def display_results(results):
             file_name=f"backtest_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
             mime="text/plain"
         )
+
