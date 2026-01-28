@@ -52,9 +52,9 @@ class DecisionEngine:
             Weighted confidence 0.0-1.0
         """
         confidence = (
-            0.4 * technical_score +
-            0.4 * ai_score +
-            0.2 * sentiment_score
+            0.7 * technical_score +
+            0.2 * ai_score +
+            0.1 * sentiment_score
         )
         confidence = max(0.0, min(1.0, confidence))  # Clamp to [0, 1]
         logger.info(

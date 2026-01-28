@@ -4,7 +4,7 @@ Separates signal_direction from execution_confidence
 """
 
 # 🔥 CRITICAL THRESHOLDS
-MIN_EXECUTION_CONFIDENCE = 0.55  # Hard gate: never execute below this
+MIN_EXECUTION_CONFIDENCE = 0.40  # Hard gate: never execute below this (adjusted for trading)
 MIN_TECHNICAL_SCORE = 0.65  # Technical signal must be strong enough if AI unavailable
 MAX_POSITION_CHANGE_PER_TRADE = 3  # Don't more than 3x position at once
 
