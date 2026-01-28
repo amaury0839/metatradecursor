@@ -264,31 +264,64 @@ if __name__ == "__main__":
     import time
     import logging
     import sys
+    import signal
     from app.core.logger import setup_logger
     
     logging.basicConfig(level=logging.INFO)
     logger = setup_logger("trading_loop_runner")
     logger.info("🚀 Trading loop started (continuous mode - 60s interval)")
     
+    # Initialize variables
     cycle_count = 0
     error_count = 0
     
-    while True:
+    # Use a simple class to hold mutable state for signal handler
+    class State:
+        shutdown = False
+    
+    # Signal handler for graceful shutdown
+    def handle_interrupt(signum, frame):
+        State.shutdown = True
+        logger.info("⏹️  Shutdown signal received...")
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, handle_interrupt)
+    try:
+        signal.signal(signal.SIGTERM, handle_interrupt)
+    except (AttributeError, ValueError):
+        pass  # SIGTERM may not be available on all platforms
+    
+    while not State.shutdown:
         try:
             cycle_count += 1
             logger.info(f"📊 Cycle #{cycle_count} starting...")
             main_trading_loop()
             logger.info("⏸️  Waiting 60 seconds before next cycle...")
             error_count = 0  # Reset error count on successful cycle
-            time.sleep(60)  # Wait 60 seconds before next iteration
+            
+            # Wait 60 seconds in 1-second chunks to allow graceful shutdown
+            for i in range(60):
+                if State.shutdown:
+                    break
+                time.sleep(1)
+                
         except KeyboardInterrupt:
-            logger.info("⏹️  Trading loop interrupted by user")
-            sys.exit(0)
-        except (SystemExit, EOFError):
-            # Don't treat system exit as an error - just log and continue
-            logger.warning("⚠️  System interrupt detected, but continuing...")
-            logger.info("⏸️  Waiting 60 seconds before retry...")
-            time.sleep(60)
+            logger.info("⏹️  Trading loop interrupted by user (KeyboardInterrupt)")
+            State.shutdown = True
+        except (SystemExit, EOFError) as e:
+            # Log but continue unless it's a critical error
+            logger.warning(f"⚠️  System signal detected: {type(e).__name__}, continuing...")
+            error_count += 1
+            if error_count >= 5:
+                logger.error(f"❌ Too many system signals ({error_count}), exiting...")
+                sys.exit(1)
+            
+            # Wait before retry
+            for i in range(60):
+                if State.shutdown:
+                    break
+                time.sleep(1)
+                
         except Exception as e:
             error_count += 1
             logger.error(f"Error in trading loop iteration #{cycle_count}: {e}", exc_info=True)
@@ -296,4 +329,12 @@ if __name__ == "__main__":
                 logger.error(f"❌ Too many consecutive errors ({error_count}), exiting...")
                 sys.exit(1)
             logger.info(f"⏸️  Waiting 60 seconds before retry... (error #{error_count})")
-            time.sleep(60)  # Wait before retry on error
+            
+            # Wait before retry
+            for i in range(60):
+                if State.shutdown:
+                    break
+                time.sleep(1)
+    
+    logger.info("✅ Trading loop shutdown complete")
+    sys.exit(0)
