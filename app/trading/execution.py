@@ -47,7 +47,10 @@ def get_bid_ask(symbol: str) -> Tuple[float, float]:
     t = mt5.symbol_info_tick(symbol)
     if t is None:
         return None, None
-    return t.bid, t.ask
+    if isinstance(t, dict):
+        return t.get("bid"), t.get("ask")
+    # Fallback to attribute access
+    return getattr(t, "bid", None), getattr(t, "ask", None)
 
 
 def min_stop_distance(symbol: str) -> float:
@@ -126,7 +129,8 @@ class ExecutionManager:
         volume: float,
         sl_price: Optional[float] = None,
         tp_price: Optional[float] = None,
-        comment: str = "AI Trading Bot"
+        comment: str = "AI Trading Bot",
+        atr: Optional[float] = None,
     ) -> Tuple[bool, Optional[Dict], Optional[str]]:
         """
         Place a market order
@@ -142,6 +146,23 @@ class ExecutionManager:
         Returns:
             Tuple of (success, order_result_dict, error_message)
         """
+        # 🔴 CRITICAL: Log symbol info at entry
+        logger.info(f"🔴 place_market_order ENTRY: symbol={symbol} type={order_type} volume={volume} paper_mode={self.config.is_paper_mode()}")
+        
+        try:
+            symbol_info = self.mt5.get_symbol_info(symbol)
+            if symbol_info:
+                info_dict = symbol_info._asdict() if hasattr(symbol_info, '_asdict') else symbol_info
+                logger.info(
+                    f"🔴 Symbol Info: trade_mode={info_dict.get('trade_mode')} "
+                    f"visible={info_dict.get('visible')} "
+                    f"volume_min={info_dict.get('volume_min')} "
+                    f"volume_step={info_dict.get('volume_step')} "
+                    f"digits={info_dict.get('digits')}"
+                )
+        except Exception as e:
+            logger.debug(f"Could not log symbol info: {e}")
+        
         # Check if in PAPER mode
         if self.config.is_paper_mode():
             logger.info(
@@ -203,24 +224,118 @@ class ExecutionManager:
             if tp_price:
                 tp_price = norm(symbol, tp_price)
             
-            # ✅ 1️⃣ Validar SL/TP CONTRA BID/ASK en vivo con fallback sin stops
-            original_sl, original_tp = sl_price, tp_price
-            stops_valid = True
-            if sl_price and tp_price:
-                valid, error = validate_stops_live(symbol, order_type.upper(), sl_price, tp_price)
-                if not valid:
-                    logger.warning(f"⚠️ {symbol}: {error}")
-                    logger.warning("Stops invalid → opening without SL/TP (will modify after entry)")
-                    sl_price = None
-                    tp_price = None
-                    stops_valid = False
-            
-            # Normalize volume
+            # ✅ 1️⃣ Validar SL/TP CONTRA BID/ASK en vivo. Nunca abrir sin SL/TP.
+            if sl_price is None or tp_price is None:
+                return False, None, "Missing SL/TP. Order aborted to avoid unprotected trade."
+
+            # Ajustar SL al stops_level real y al componente ATR/2 (buffer 1.2x)
             try:
-                volume = self.risk.normalize_volume(symbol, volume)
-            except Exception:
-                pass
+                point = symbol_info.get('point', 0.0001)
+                stops_level = float(symbol_info.get('trade_stops_level', 0) or 0)
+                min_stop_broker = stops_level * point
+                atr_component = (atr or 0) * 0.5
+                min_stop = max(min_stop_broker, atr_component)
+
+                if min_stop > 0 and sl_price is not None:
+                    dist = abs(price - sl_price)
+                    if dist < min_stop:
+                        buff = min_stop * 1.2
+                        sl_price = price - buff if order_type.upper() == "BUY" else price + buff
+                        sl_price = norm(symbol, sl_price)
+
+                # Si el SL queda del lado incorrecto del BID/ASK, reajustar con el mismo buffer
+                bid, ask = get_bid_ask(symbol)
+                side = order_type.upper()
+                if bid is not None and ask is not None and sl_price is not None:
+                    buff = (min_stop if min_stop > 0 else point) * 1.2
+                    if side == "BUY" and sl_price >= bid - (min_stop or 0):
+                        sl_price = bid - buff
+                        sl_price = norm(symbol, sl_price)
+                    elif side == "SELL" and sl_price <= ask + (min_stop or 0):
+                        sl_price = ask + buff
+                        sl_price = norm(symbol, sl_price)
+
+                # Asegurar TP del lado correcto con mismo buffer
+                if bid is not None and ask is not None and tp_price is not None:
+                    buff = (min_stop if min_stop > 0 else point) * 1.2
+                    if side == "BUY" and tp_price <= ask + (min_stop or 0):
+                        tp_price = ask + buff
+                        tp_price = norm(symbol, tp_price)
+                    elif side == "SELL" and tp_price >= bid - (min_stop or 0):
+                        tp_price = bid - buff
+                        tp_price = norm(symbol, tp_price)
+            except Exception as e:
+                logger.warning(f"Could not apply ATR/broker min stop adjustment for {symbol}: {e}")
+
+            sl_price, tp_price = self._enforce_min_stop_distance(
+                symbol,
+                order_type,
+                price,
+                sl_price,
+                tp_price,
+                symbol_info,
+            )
+
+            valid, error = validate_stops_live(symbol, order_type.upper(), sl_price, tp_price)
+            if not valid:
+                logger.warning(f"⚠️ {symbol}: {error}")
+                return False, None, f"Invalid stops: {error}"
             
+            # Normalize volume and enforce broker constraints (min/max/step)
+            try:
+                orig_volume = volume
+                final_volume = self.risk.normalize_volume(symbol, volume)
+                is_crypto = any(c in symbol.upper() for c in self.risk.CRYPTO_SYMBOLS)
+                bot_cap = self.risk.crypto_max_volume_lots if is_crypto else self.risk.hard_max_volume_lots
+
+                # Accept dict or SymbolInfo
+                if not isinstance(symbol_info, dict):
+                    try:
+                        symbol_info_dict = symbol_info._asdict()
+                    except Exception:
+                        symbol_info_dict = {}
+                else:
+                    symbol_info_dict = symbol_info
+
+                broker_min = float(symbol_info_dict.get('volume_min', 0.0) or 0.0)
+                broker_max = float(symbol_info_dict.get('volume_max', 0.0) or 0.0)
+                broker_step = float(symbol_info_dict.get('volume_step', 0.0) or 0.0)
+
+                if bot_cap and broker_min > bot_cap:
+                    logger.info(f"{symbol}: broker min volume {broker_min} exceeds bot cap {bot_cap}; using broker min")
+
+                # Apply risk normalization and caps, then enforce broker rules
+                if bot_cap:
+                    final_volume = min(final_volume, bot_cap)
+                if broker_max > 0:
+                    final_volume = min(final_volume, broker_max)
+
+                final_volume = max(final_volume, broker_min)
+
+                if broker_step > 0:
+                    final_volume = round(final_volume / broker_step) * broker_step
+                    # Guard against rounding below broker min
+                    if final_volume < broker_min:
+                        final_volume = broker_min
+                    if broker_max > 0 and final_volume > broker_max:
+                        final_volume = broker_max
+
+                # Final sanity: respect hard bounds
+                if final_volume < broker_min:
+                    return False, None, f"{symbol}: volume {final_volume} < broker min {broker_min}, skipping"
+                if broker_max > 0 and final_volume > broker_max:
+                    final_volume = broker_max
+
+                final_volume = self.risk.normalize_volume(symbol, final_volume)
+                if final_volume != orig_volume:
+                    logger.info(f"{symbol} execution volume adjusted to {final_volume} from {orig_volume}")
+                volume = final_volume
+            except Exception as e:
+                logger.warning(f"Failed to normalize volume for {symbol}: {e}")
+                final_volume = volume
+            
+            logger.info(f"{symbol} sending order with volume={volume}")
+
             # ✅ 3️⃣ Preparar request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -293,24 +408,6 @@ class ExecutionManager:
             )
 
             # Si abrimos sin SL/TP por validación, aplicar después de entrar
-            if not stops_valid and original_sl and original_tp:
-                try:
-                    adj_sl, adj_tp = self._enforce_min_stop_distance(
-                        symbol,
-                        order_type,
-                        result.price,
-                        original_sl,
-                        original_tp,
-                        symbol_info,
-                    )
-                    ok, err = self.modify_position(result.order, sl_price=adj_sl, tp_price=adj_tp)
-                    if ok:
-                        logger.info(f"✅ SL/TP applied post-entry: SL={adj_sl}, TP={adj_tp}")
-                    else:
-                        logger.warning(f"Could not apply SL/TP after entry: {err}")
-                except Exception as e:
-                    logger.warning(f"Post-entry SL/TP apply failed: {e}")
-            
             return True, result_dict, None
             
         except Exception as e:
@@ -334,11 +431,16 @@ class ExecutionManager:
                     symbol_info = symbol_info._asdict()
                 except Exception:
                     symbol_info = {}
-            point = symbol_info.get('point', 0.0001)
-            min_points = symbol_info.get('trade_stops_level', symbol_info.get('stops_level', 0)) or 0
-            min_dist = min_points * point
+            point = float(symbol_info.get('point', 0.0001))
+            stops_level = float(symbol_info.get('trade_stops_level', symbol_info.get('stops_level', 0)) or 0)
+            freeze_level = float(symbol_info.get('trade_freeze_level', 0) or 0)
+            min_points = max(stops_level, freeze_level)
+            min_dist = min_points * point * 1.2  # buffer defensivo
             if min_dist <= 0:
                 return sl_price, tp_price
+
+            digits = int(symbol_info.get('digits', 5))
+            step = float(symbol_info.get('trade_tick_size', point) or point)
 
             is_buy = order_type.upper() == "BUY"
 
@@ -347,12 +449,18 @@ class ExecutionManager:
                 if dist < min_dist:
                     sl_price = entry_price - min_dist if is_buy else entry_price + min_dist
                     logger.info(f"Adjusted SL for {symbol} to respect min stop distance ({min_dist})")
+                    if step > 0:
+                        sl_price = round(sl_price / step) * step
+                    sl_price = round(sl_price, digits)
 
             if tp_price:
                 dist = (tp_price - entry_price) if is_buy else (entry_price - tp_price)
                 if dist < min_dist:
                     tp_price = entry_price + min_dist if is_buy else entry_price - min_dist
                     logger.info(f"Adjusted TP for {symbol} to respect min stop distance ({min_dist})")
+                    if step > 0:
+                        tp_price = round(tp_price / step) * step
+                    tp_price = round(tp_price, digits)
 
             return sl_price, tp_price
         except Exception as e:
@@ -396,10 +504,12 @@ class ExecutionManager:
             # Determine close type (opposite of position type)
             if pos_type == mt5.POSITION_TYPE_BUY:
                 close_type = mt5.ORDER_TYPE_SELL
-                price = mt5.symbol_info_tick(symbol).bid
+                tick = self.mt5.symbol_info_tick(symbol) or {}
+                price = tick.get('bid') if isinstance(tick, dict) else getattr(tick, 'bid', None)
             else:
                 close_type = mt5.ORDER_TYPE_BUY
-                price = mt5.symbol_info_tick(symbol).ask
+                tick = self.mt5.symbol_info_tick(symbol) or {}
+                price = tick.get('ask') if isinstance(tick, dict) else getattr(tick, 'ask', None)
             
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,

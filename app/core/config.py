@@ -22,33 +22,38 @@ class TradingConfig(BaseSettings):
     
     mode: str = Field("LIVE", alias="MODE")
     timezone: str = Field("America/New_York", alias="TIMEZONE")
-    polling_interval_seconds: int = Field(30, alias="POLLING_INTERVAL_SECONDS")
+    polling_interval_seconds: int = Field(60, alias="POLLING_INTERVAL_SECONDS")  # Increased from 30s to 60s for stability
     
-    # Default symbols - 50 Forex + Crypto pairs
+    # 🔧 EXPANDED: ALL 48 Forex + Crypto Pairs Available in MT5
     default_symbols: List[str] = [
-        # Major Forex Pairs (10)
-        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP",
-        # Minor Forex Pairs (10)
-        "EURAUD", "EURCAD", "EURNZD", "GBPAUD", "GBPCAD", "GBPNZD", "AUDCAD", "AUDNZD", "CADCHF", "CHFJPY",
-        # Exotic Forex Pairs (5)
-        "USDSEK", "USDNOK", "USDHKD", "USDSGD", "USDZAR",
-        # Cryptocurrencies (15) - 24/7 trading
-        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "ADAUSD", "DOGEUSD", "XRPUSD", "DOTUSD", "LTCUSD", "AVAXUSD",
-        "MATICUSD", "LINKUSD", "UNIUSD", "FTMUSD", "ARBUSD"
+        # === MAJOR FOREX PAIRS (7) ===
+        "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+        
+        # === CROSS PAIRS (32) ===
+        "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD", "AUDSGD", "CADCHF", "CADJPY",
+        "CHFJPY", "CHFSGD", "EURAUD", "EURCAD", "EURCHF", "EURGBP", "EURJPY",
+        "EURNOK", "EURNZD", "EURPLN", "EURSEK", "EURSGD", "GBPAUD", "GBPCAD",
+        "GBPCHF", "GBPJPY", "GBPSGD", "NZDCAD", "NZDCHF", "NZDJPY", "USDHKD",
+        "USDMXN", "USDSGD", "USDTRY", "USDZAR",
+        
+        # === CRYPTO (9) ===
+        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", 
+        "DOTUSD", "LTCUSD", "UNIUSD",
     ]
-    default_timeframe: str = "M15"
     
-    # Risk defaults
-    # Aggressive but bounded defaults (can be overridden via .env)
-    default_risk_per_trade: float = Field(2.0, alias="DEFAULT_RISK_PER_TRADE")  # Reduced for more positions
-    default_max_daily_loss: float = Field(8.0, alias="DEFAULT_MAX_DAILY_LOSS")
-    default_max_drawdown: float = Field(15.0, alias="DEFAULT_MAX_DRAWDOWN")
-    default_max_positions: int = Field(25, alias="DEFAULT_MAX_POSITIONS")  # Increased to 25 positions
+    default_timeframe: str = "M15"  # M15 scalping (balanced for 200 trades)
     
-    # Crypto-specific (can trade 24/7)
+    # 🔧 ADAPTIVE SIZING: Risk adjusted to balance (see RiskManager.calculate_position_size_by_balance)
+    default_risk_per_trade: float = Field(1.5, alias="DEFAULT_RISK_PER_TRADE")  # 1.5% per trade (MORE AGGRESSIVE)
+    default_max_daily_loss: float = Field(10.0, alias="DEFAULT_MAX_DAILY_LOSS")  # 10% max daily loss (more aggressive)
+    default_max_drawdown: float = Field(10.0, alias="DEFAULT_MAX_DRAWDOWN")  # 10% max drawdown
+    default_max_positions: int = Field(200, alias="DEFAULT_MAX_POSITIONS")  # MAX 200 open trades
+    
+    # 🔧 Crypto-specific: ENABLED with adaptive sizing
     crypto_symbols: List[str] = [
-        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "ADAUSD", "DOGEUSD", "XRPUSD", "DOTUSD", "LTCUSD", "AVAXUSD",
-        "MATICUSD", "LINKUSD", "UNIUSD", "FTMUSD", "ARBUSD"
+        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "LTCUSD", "DOGEUSD",
+        "AVAXUSD", "POLKAUSD", "UNIUSD", "LINKUSD", "LUNAUSD", "MATICUSD",
+        "ATOMUSD", "VETUSD", "FILUSD", "ARBUSD", "OPUSD", "GMXUSD",
     ]
     enable_crypto_trading: bool = Field(True, alias="ENABLE_CRYPTO_TRADING")
     

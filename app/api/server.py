@@ -50,6 +50,10 @@ def startup_event():
     # Start MT5 connection in background thread
     mt5_thread = threading.Thread(target=connect_mt5_background, daemon=True)
     mt5_thread.start()
+    
+    # Start trading scheduler automatically
+    logger.info("🔄 Iniciando scheduler de trading...")
+    start_trading_scheduler()
 
 # Global scheduler instance
 _scheduler: Optional[TradingScheduler] = None
@@ -229,6 +233,25 @@ async def get_symbols():
     return {"symbols": symbols}
 
 
+@app.get("/symbols/info")
+async def get_symbols_info():
+    """Get detailed symbol info including volume min/max/step"""
+    mt5 = get_mt5_client()
+    symbols = mt5.get_symbols()
+    details = []
+    for sym in symbols:
+        info = mt5.get_symbol_info(sym) or {}
+        details.append({
+            "symbol": sym,
+            "volume_min": info.get("volume_min"),
+            "volume_max": info.get("volume_max"),
+            "volume_step": info.get("volume_step"),
+            "digits": info.get("digits"),
+            "point": info.get("point"),
+        })
+    return {"symbols": details}
+
+
 @app.get("/logs/analysis")
 async def get_analysis_logs(
     symbol: Optional[str] = None,
@@ -245,6 +268,65 @@ async def get_analysis_logs(
         limit=limit
     )
     return {"logs": logs, "total": len(logs)}
+
+
+@app.get("/ai/tuning")
+async def get_ai_tuning():
+    """Get latest AI tuning/adjustment parameters"""
+    from app.trading.risk import get_risk_manager
+    
+    risk = get_risk_manager()
+    
+    # Return latest tuning state
+    return {
+        "risk_per_trade": risk.risk_per_trade_pct,
+        "max_drawdown": risk.max_drawdown_pct,
+        "max_positions": risk.max_positions,
+        "crypto_cap": risk.crypto_max_volume_lots,
+        "forex_cap": risk.hard_max_volume_lots,
+        "atr_sl_multiplier": risk.ATR_MULTIPLIER_SL,
+        "atr_tp_multiplier": risk.ATR_MULTIPLIER_TP,
+        "last_adjusted": None,
+        "status": "operational"
+    }
+
+
+@app.get("/ai/backtest/mini")
+async def get_mini_backtest(symbol: str = "EURUSD", candles: int = 50):
+    """Run quick backtest on last N candles for a symbol"""
+    try:
+        from app.backtest.historical_engine import HistoricalBacktestEngine
+        from datetime import datetime, timedelta
+        
+        # Get last N candles
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=candles*0.25)  # ~15 min candles
+        
+        engine = HistoricalBacktestEngine(initial_balance=10000)
+        results = engine.run_backtest(
+            symbol=symbol,
+            timeframe="M15",
+            start_date=start_time.date(),
+            end_date=end_time.date()
+        )
+        
+        if results:
+            return {
+                "symbol": symbol,
+                "candles": candles,
+                "total_trades": results.total_trades,
+                "winning_trades": results.winning_trades,
+                "win_rate": (results.winning_trades / results.total_trades * 100) if results.total_trades > 0 else 0,
+                "total_profit": results.total_profit,
+                "max_drawdown": results.max_drawdown_pct if hasattr(results, 'max_drawdown_pct') else 0,
+                "profit_factor": results.profit_factor if hasattr(results, 'profit_factor') else 0,
+                "status": "completed"
+            }
+        else:
+            return {"status": "no_data", "symbol": symbol}
+    except Exception as e:
+        logger.warning(f"Mini backtest failed: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000):

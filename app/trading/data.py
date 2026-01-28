@@ -63,6 +63,8 @@ class DataProvider:
         """
         Get OHLC data as DataFrame
         
+        🔧 FIXED: Add symbol_select, retry logic, better error logging
+        
         Args:
             symbol: Symbol name
             timeframe: Timeframe string (e.g., 'M15')
@@ -82,16 +84,26 @@ class DataProvider:
         
         # Fetch from MT5
         if not self.mt5.is_connected():
-            logger.warning("MT5 not connected, cannot fetch data")
+            logger.warning(f"MT5 not connected, cannot fetch data for {symbol}")
             return None
         
         try:
+            # 🔧 FIXED: get_rates() now internally calls ensure_symbol() 
+            # (no need to call symbol_select here - causes AttributeError)
             tf_constant = get_timeframe_constant(timeframe)
             rates = self.mt5.get_rates(symbol, tf_constant, count)
             
             if rates is None or len(rates) == 0:
-                logger.warning(f"No data returned for {symbol} {timeframe}")
-                return None
+                # 🔧 Retry once before giving up
+                logger.warning(f"{symbol} {timeframe}: No data on first try, retrying...")
+                rates = self.mt5.get_rates(symbol, tf_constant, count)
+                
+                if rates is None or len(rates) == 0:
+                    logger.error(
+                        f"{symbol} {timeframe}: Still no data after retry. "
+                        f"FORCE HOLD - no valid market data available"
+                    )
+                    return None
             
             # Convert to DataFrame
             # Handle both list of dicts and list of tuples
@@ -131,7 +143,7 @@ class DataProvider:
             # Cache result
             self._cache[cache_key] = (df.copy(), now)
             
-            logger.debug(f"Fetched {len(df)} candles for {symbol} {timeframe}")
+            logger.debug(f"✓ Fetched {len(df)} candles for {symbol} {timeframe}")
             return df
             
         except Exception as e:

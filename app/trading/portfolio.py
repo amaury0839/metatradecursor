@@ -66,6 +66,27 @@ class PortfolioManager:
                 pnl_by_symbol[symbol] = pnl_by_symbol.get(symbol, 0.0) + profit
         
         return pnl_by_symbol
+    
+    def get_exposure_by_currency(self, currency: str) -> int:
+        """
+        Get count of open positions for a specific currency
+        
+        Args:
+            currency: 3-letter currency code (e.g., 'EUR')
+        
+        Returns:
+            Count of positions with this currency as base
+        """
+        positions = self.get_open_positions()
+        count = 0
+        
+        for pos in positions:
+            symbol = pos.get('symbol', '')
+            # Extract base currency from symbol (first 3 chars)
+            if symbol.startswith(currency):
+                count += 1
+        
+        return count
 
 
 # Global portfolio manager instance

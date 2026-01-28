@@ -12,9 +12,31 @@ from app.ai.enhanced_decision_engine import get_enhanced_decision_engine
 logger = setup_logger("ai_router")
 
 
-def should_call_gemini(technical_signal: str) -> bool:
-    """Only call Gemini when the technical layer is inconclusive (HOLD)."""
-    return technical_signal == "HOLD"
+def should_call_gemini(technical_signal: str, has_executable_signal: bool = True) -> bool:
+    """
+    Determine if Gemini should be consulted.
+    
+    🔧 FIXED: Always call Gemini when trade is executable.
+    - Use Gemini as quality filter/confirmation, not replacement
+    - Only skip if technical=HOLD and no other context
+    
+    Args:
+        technical_signal: BUY/SELL/HOLD
+        has_executable_signal: True if trade is close to execution (spread/vol/time ok)
+    
+    Returns:
+        True if Gemini should confirm
+    """
+    # If technical already says HOLD → skip IA (neutral context)
+    if technical_signal == "HOLD":
+        return False
+    
+    # If technical says BUY/SELL and trade is executable → CALL IA to confirm
+    if technical_signal in ["BUY", "SELL"] and has_executable_signal:
+        return True
+    
+    # Default: call Gemini for validation
+    return True
 
 
 def make_smart_decision(
@@ -42,12 +64,23 @@ def make_smart_decision(
     db = get_database_manager()
     tech_signal = technical_data.get('signal', 'HOLD') if technical_data else 'HOLD'
 
-    # Skip Gemini completely when the technical layer already has a clear signal
-    if not should_call_gemini(tech_signal):
+    # 🔧 FIXED: Always try to get IA confirmation when technical signal is actionable
+    # Previously: skipped IA entirely if technical=BUY/SELL
+    # Now: use IA as quality filter (veto/confirm), not replacement
+    
+    has_executable_signal = tech_signal in ["BUY", "SELL"]
+    should_use_ai = should_call_gemini(tech_signal, has_executable_signal)
+    
+    if not should_use_ai:
         logger.info(
-            f"Skipping AI for {symbol} {timeframe}: technical signal={tech_signal}"
+            f"Skipping AI for {symbol}: technical signal=HOLD (neutral context)"
         )
         return None
+    
+    logger.info(
+        f"Consulting AI for {symbol}: technical signal={tech_signal} "
+        f"(using as quality filter/confirmation)"
+    )
     
     # Try enhanced engine first if enabled
     if use_enhanced:

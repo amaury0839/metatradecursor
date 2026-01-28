@@ -29,6 +29,40 @@ class DecisionEngine:
         self.risk = get_risk_manager()
         self.sentiment = get_sentiment_analyzer()
     
+    def _calculate_weighted_confidence(
+        self,
+        technical_score: float = 0.0,
+        ai_score: float = 0.0,
+        sentiment_score: float = 0.0
+    ) -> float:
+        """
+        Calculate real weighted confidence instead of hardcoded 0.60
+        
+        Weights:
+        - Technical: 40% (RSI, EMA, trend signals)
+        - AI: 40% (Gemini analysis)
+        - Sentiment: 20% (News signals)
+        
+        Args:
+            technical_score: 0.0-1.0 (from indicators)
+            ai_score: 0.0-1.0 (from Gemini)
+            sentiment_score: 0.0-1.0 (from news)
+        
+        Returns:
+            Weighted confidence 0.0-1.0
+        """
+        confidence = (
+            0.4 * technical_score +
+            0.4 * ai_score +
+            0.2 * sentiment_score
+        )
+        confidence = max(0.0, min(1.0, confidence))  # Clamp to [0, 1]
+        logger.info(
+            f"Confidence breakdown: tech={technical_score:.2f}, ai={ai_score:.2f}, "
+            f"sentiment={sentiment_score:.2f} → weighted={confidence:.2f}"
+        )
+        return confidence
+    
     def make_decision(
         self,
         symbol: str,
@@ -174,6 +208,11 @@ class DecisionEngine:
                 # Ensure other defaults exist
                 gemini_response.setdefault('market_bias', 'neutral')
                 gemini_response.setdefault('sources', [])
+                # 🔴 NOTE: risk_ok from Gemini is just an indicator, NOT a blocker
+                # Real risk validation happens in check_all_risk_conditions() in main.py
+                # If Gemini says risk_ok=False, it will trigger a warning in logs
+                # but the actual risk check uses multiple parameters (equity, drawdown, positions, etc.)
+                gemini_response.setdefault('risk_ok', True)
                 
                 decision = TradingDecision(**gemini_response)
                 
@@ -219,12 +258,24 @@ class DecisionEngine:
         current_price: float,
     ) -> TradingDecision:
         """Create a TradingDecision purely from technical data, sizing the order."""
+        # 🔧 FIX: Calculate real confidence instead of hardcoding 0.6
+        # For pure technical signal:
+        # - Technical score: 0.75 for BUY/SELL (strong), 0.25 for HOLD (weak)
+        # - AI score: 0.0 (not available in this path)
+        # - Sentiment: 0.0 (not analyzed in this path)
+        technical_score = 0.75 if action != "HOLD" else 0.25
+        confidence = self._calculate_weighted_confidence(
+            technical_score=technical_score,
+            ai_score=0.0,
+            sentiment_score=0.0
+        )
+        
         decision = TradingDecision(
             action=action,
-            confidence=0.6,
+            confidence=confidence,
             symbol=symbol,
             timeframe=timeframe,
-            reasoning="Technical signal strong enough; AI context skipped.",
+            reasoning="Technical signal analysis.",
             market_bias="neutral",
             risk_ok=True,
             sources=["technical"],
@@ -233,7 +284,11 @@ class DecisionEngine:
         if action in ["BUY", "SELL"]:
             account_info = self.mt5.get_account_info()
             equity = account_info.get("equity", 1000) if account_info else 1000
-            risk_amount = equity * (min(self.risk.risk_per_trade_pct, self.risk.max_trade_risk_pct) / 100)
+            
+            # 🔥 USE DYNAMIC RISK FROM RISK_CONFIG BASED ON ASSET TYPE
+            adaptive_risk_pct = self.risk.get_risk_pct_for_symbol(symbol) * 100
+            clamped_risk_pct = min(adaptive_risk_pct, self.risk.max_trade_risk_pct)
+            risk_amount = equity * (clamped_risk_pct / 100)
 
             # Usar ATR para calcular stops válidos
             atr = float(indicators.get("atr", 0) or 0)

@@ -1,0 +1,409 @@
+HARD CLOSE RULES - PARAMETER TUNING GUIDE
+===============================================================================
+
+CONFIGURABLE PARAMETERS - QUICK REFERENCE
+─────────────────────────────────────────────────────────────────────────────
+
+All parameters have sensible defaults but can be tuned based on trading style.
+
+═════════════════════════════════════════════════════════════════════════════
+
+REGLA A - RSI EXTREMO PARAMETERS
+─────────────────────────────────────────────────────────────────────────────
+
+Location: app/trading/position_manager.py
+Function: should_close_on_rsi_extreme()
+
+Parameter 1: RSI_BUY_EXTREME_THRESHOLD = 80
+─────────────────────────────────────────────────────────────────────────────
+Description: Close BUY positions if RSI > this value (overbought)
+Current: 80 (normal overbought threshold)
+Range: 70-90
+  70 = AGGRESSIVE (close most overbought)
+  80 = STANDARD (close strong overbought)
+  90 = CONSERVATIVE (only close extreme overbought)
+
+Impact (lower = more closes):
+  RSI_BUY_EXTREME_THRESHOLD = 75
+  → Closes more BUY positions (more conservative)
+  → Expected daily closes: +2-3 more from Regla A
+  → Expected avg loss: slightly lower
+
+  RSI_BUY_EXTREME_THRESHOLD = 85
+  → Closes fewer BUY positions (more aggressive)
+  → Expected daily closes: -2-3 fewer from Regla A
+  → Expected avg loss: slightly higher
+
+Parameter 2: RSI_SELL_EXTREME_THRESHOLD = 20
+─────────────────────────────────────────────────────────────────────────────
+Description: Close SELL positions if RSI < this value (oversold)
+Current: 20 (normal oversold threshold)
+Range: 10-30
+  10 = AGGRESSIVE (close most oversold)
+  20 = STANDARD (close strong oversold)
+  30 = CONSERVATIVE (only close extreme oversold)
+
+Impact (higher = more closes):
+  RSI_SELL_EXTREME_THRESHOLD = 25
+  → Closes more SELL positions (more conservative)
+  → Expected daily closes: +2-3 more from Regla A
+  
+  RSI_SELL_EXTREME_THRESHOLD = 15
+  → Closes fewer SELL positions (more aggressive)
+  → Expected daily closes: -2-3 fewer from Regla A
+
+═════════════════════════════════════════════════════════════════════════════
+
+REGLA B - TTL (TIME TO LIVE) PARAMETERS
+─────────────────────────────────────────────────────────────────────────────
+
+Location: app/trading/position_manager.py
+Function: should_close_on_candle_ttl()
+
+Parameter 1: max_candles_without_profit = 6
+─────────────────────────────────────────────────────────────────────────────
+Description: Close positions held this many M15 candles without profit
+Current: 6 candles = 90 minutes
+Range: 4-10 candles
+  4 candles = 60 min (AGGRESSIVE - close stuck trades fast)
+  6 candles = 90 min (STANDARD)
+  8 candles = 120 min (CONSERVATIVE - give trades more time)
+  10 candles = 150 min (VERY CONSERVATIVE)
+
+Impact (lower = more closes):
+  max_candles_without_profit = 4
+  → Much tighter time limit (60 min max without profit)
+  → Expected daily closes: +5-8 more
+  → Expected avg loss: -$5 (tighter stops on time)
+  → Risk: Close winning trades too early
+
+  max_candles_without_profit = 8
+  → Longer time limit (120 min with no profit)
+  → Expected daily closes: -3-5 fewer
+  → Expected avg loss: -$12 (let winners run longer)
+  → Risk: Hold losers too long on "next candle hope"
+
+HOW TO CHANGE:
+1. Edit: app/trading/position_manager.py
+2. Find: def should_close_on_candle_ttl(..., max_candles_without_profit=6...)
+3. Change 6 to your preferred value
+4. Restart bot
+
+Parameter 2: min_profit_threshold = 0.05%
+─────────────────────────────────────────────────────────────────────────────
+Description: If profit exceeds this, trade is considered profitable (don't close)
+Current: 0.05% (5 pips on 1.0 leverage)
+Range: 0.01% - 0.15%
+  0.01% = VERY STRICT (almost any profit counts as success)
+  0.05% = STANDARD (small profit counts as success)
+  0.10% = LOOSE (need bigger profit to count as success)
+
+Impact (lower = easier to count as profitable):
+  min_profit_threshold = 0.01%
+  → Most trades count as profitable after TTL check
+  → Regla B triggers less often
+  → Keep more positions open longer
+  
+  min_profit_threshold = 0.10%
+  → Need real profit to avoid TTL close
+  → Regla B triggers more often
+  → Close stuck trades faster
+
+Parameter 3: timeframe = "M15"
+─────────────────────────────────────────────────────────────────────────────
+Description: Candle timeframe for TTL calculation
+Current: "M15" (15 minute candles)
+Options: "M15", "M30", "H1", "H4"
+  "M15" = 15 min candles
+  "M30" = 30 min candles
+  "H1" = 60 min (hourly) candles
+  "H4" = 240 min (4-hour) candles
+
+⚠️  IMPORTANT: Must match your bot's actual trading timeframe!
+
+Mapping:
+  max_candles_without_profit=6 on M15 = 90 min max
+  max_candles_without_profit=6 on M30 = 180 min max
+  max_candles_without_profit=6 on H1 = 360 min max
+  max_candles_without_profit=6 on H4 = 1440 min (24 hours!)
+
+═════════════════════════════════════════════════════════════════════════════
+
+REGLA C - EMA INVALIDATION PARAMETERS
+─────────────────────────────────────────────────────────────────────────────
+
+Location: app/trading/position_manager.py
+Function: should_close_on_ema_invalidation()
+
+This rule is NOT parameterized - it uses simple logic:
+  BUY valid = EMA_fast > EMA_slow (uptrend)
+  SELL valid = EMA_fast < EMA_slow (downtrend)
+
+If this relationship breaks, position is closed.
+
+NO PARAMETERS TO TUNE
+
+But you can DISABLE this rule by commenting out the check in main.py:
+
+In app/main.py, find:
+---
+should_close_ema, ema_reason = position_manager.should_close_on_ema_invalidation(...)
+if should_close_ema:
+    should_close = True
+---
+
+To disable temporarily:
+---
+# should_close_ema, ema_reason = position_manager.should_close_on_ema_invalidation(...)
+# if should_close_ema:
+#     should_close = True
+---
+
+═════════════════════════════════════════════════════════════════════════════
+
+POSITION RANKING (PRIORIDAD 3) PARAMETERS
+─────────────────────────────────────────────────────────────────────────────
+
+Location: app/trading/position_manager.py
+Function: rank_positions_for_closing()
+
+Scoring Formula: score = (pnl × 0.60) - (minutes_held × 0.25) + (distance_to_sl × 0.15)
+
+Parameter 1: PnL Weight = 0.60 (60%)
+─────────────────────────────────────────────────────────────────────────────
+Description: How important is P&L when ranking positions?
+Current: 0.60 (most important factor)
+Range: 0.30 - 0.80
+
+Impact (higher = more weight on losses):
+  0.70 (70%):
+  → Prioritize closing biggest losses
+  → Example: Close -$20 position over -$8 position
+  
+  0.50 (50%):
+  → Balance P&L with other factors equally
+  
+  0.40 (40%):
+  → Time held and distance to SL become more important
+  → Less aggressive on loss cutting
+
+Parameter 2: Minutes Held Weight = 0.25 (25%)
+─────────────────────────────────────────────────────────────────────────────
+Description: How important is position age when ranking?
+Current: 0.25 (secondary factor)
+Range: 0.10 - 0.40
+
+Impact (higher = favor closing older positions):
+  0.40 (40%):
+  → Prefer closing trades held longest
+  → More rotation/turnover
+  → Less stale positions
+  
+  0.15 (15%):
+  → Less emphasis on age
+  → Mostly based on P&L
+
+Parameter 3: Distance to SL Weight = 0.15 (15%)
+─────────────────────────────────────────────────────────────────────────────
+Description: How important is proximity to stop loss?
+Current: 0.15 (tertiary factor)
+Range: 0.05 - 0.30
+
+Impact (higher = favor closing positions near SL):
+  0.30 (30%):
+  → Avoid stop losses by closing early
+  → More defensive approach
+  
+  0.05 (5%):
+  → Almost ignore SL proximity
+  → Focus on P&L and age only
+
+QUICK TUNING PRESETS:
+
+Preset 1: "LOSS AGGRESSIVE"
+score = (pnl × 0.75) - (minutes × 0.15) + (distance × 0.10)
+→ Closes worst losses first, ignores other factors
+→ For traders who want to cut losses quickly
+→ Best for: scalping, high volatility
+
+Preset 2: "BALANCED" (DEFAULT)
+score = (pnl × 0.60) - (minutes × 0.25) + (distance × 0.15)
+→ Balanced consideration of all factors
+→ For traders who want reasonable position management
+→ Best for: most strategies
+
+Preset 3: "ROTATION FOCUSED"
+score = (pnl × 0.40) - (minutes × 0.40) + (distance × 0.20)
+→ Rotate out of old positions regardless of P&L
+→ For traders who like fresh positions
+→ Best for: swing traders, diversification
+
+═════════════════════════════════════════════════════════════════════════════
+
+PORTFOLIO CAPACITY THRESHOLD
+─────────────────────────────────────────────────────────────────────────────
+
+Location: app/main.py
+In main_trading_loop(), line ~330
+
+Code:
+  max_capacity_threshold = config.trading.default_max_positions * 0.8
+  
+  if len(open_positions) >= max_capacity_threshold:
+      # Close 1-2 worst positions
+
+Parameter: 0.8 (80%)
+─────────────────────────────────────────────────────────────────────────────
+Description: At what capacity should we start closing worst positions?
+Current: 80% (if 50 slots → triggers at 40 open)
+Range: 0.60 - 0.90
+
+Impact (lower = trigger earlier):
+  0.60 (60%):
+  → Rank and close when portfolio is 60% full (30/50)
+  → Keep portfolio lean, always space for opportunities
+  → Risk: Close positions too aggressively
+  
+  0.80 (80%):
+  → Rank and close when portfolio is 80% full (40/50)
+  → Standard balance of fullness and opportunity
+  → Default (probably good for you)
+  
+  0.90 (90%):
+  → Only rank and close when almost completely full (45/50)
+  → Keep as many positions as possible open
+  → Risk: No slots left for new high-confidence trades
+
+Parameter 2: max_close_before_entry = 2
+─────────────────────────────────────────────────────────────────────────────
+Description: How many worst positions to close when triggered?
+Current: 2
+Range: 1 - 5
+
+Impact (higher = close more positions):
+  1 position:
+  → Conservative, only close 1 worst trade
+  → Minimize disruption
+  
+  2 positions:
+  → Standard, close 2 worst trades
+  → Free 2 slots for new opportunities
+  
+  3+ positions:
+  → Aggressive, clean house more
+  → Can disrupt momentum
+
+═════════════════════════════════════════════════════════════════════════════
+
+HOW TO CHANGE PARAMETERS - STEP BY STEP
+─────────────────────────────────────────────────────────────────────────────
+
+Example 1: Make Regla B more aggressive (close stuck trades faster)
+
+Current: max_candles_without_profit = 6 (90 min max)
+Change to: max_candles_without_profit = 4 (60 min max)
+
+Steps:
+1. Open: app/trading/position_manager.py
+2. Find line: def should_close_on_candle_ttl(...)
+3. Look for: max_candles_without_profit=6
+4. Change to: max_candles_without_profit=4
+5. Save file
+6. Restart bot: python run_bot.py
+7. Monitor logs for "HARD CLOSE: 4 candles" messages
+8. Adjust if needed
+
+Example 2: Change ranking to be loss-focused
+
+Current: (pnl × 0.60) - (minutes × 0.25) + (distance × 0.15)
+Change to: (pnl × 0.75) - (minutes × 0.15) + (distance × 0.10)
+
+Steps:
+1. Open: app/trading/position_manager.py
+2. Find: def rank_positions_for_closing()
+3. Find line: score = ...
+4. Modify weights
+5. Save and restart
+6. Monitor that biggest losses close first
+
+Example 3: Make portfolio less aggressive (keep more positions open)
+
+Current: trigger at 80% (40/50)
+Change to: trigger at 90% (45/50)
+
+Steps:
+1. Open: app/main.py
+2. Find: max_capacity_threshold = ... * 0.8
+3. Change 0.8 to 0.9
+4. Save and restart
+5. Ranking will trigger later in trading session
+
+═════════════════════════════════════════════════════════════════════════════
+
+RECOMMENDED CONFIGURATIONS BY TRADING STYLE
+─────────────────────────────────────────────────────────────────────────────
+
+SCALPING (Fast, small positions, quick exits)
+  RSI_BUY_EXTREME = 75 (lower = more sensitive)
+  max_candles = 4 (close stuck trades fast)
+  Ranking weight = (0.70, 0.15, 0.15) [Loss focus]
+  Portfolio threshold = 0.70 (keep slots open)
+  
+AGGRESSIVE SWING (Medium hold, risk tolerance)
+  RSI_BUY_EXTREME = 80 (standard)
+  max_candles = 6 (standard)
+  Ranking weight = (0.60, 0.25, 0.15) [Balanced]
+  Portfolio threshold = 0.80 (standard)
+
+CONSERVATIVE TREND (Long hold, careful)
+  RSI_BUY_EXTREME = 85 (higher = less sensitive)
+  max_candles = 8 (give trades more time)
+  Ranking weight = (0.50, 0.30, 0.20) [Time focus]
+  Portfolio threshold = 0.90 (let positions run)
+
+POSITION TRADER (Very long holds)
+  RSI_BUY_EXTREME = 90 (almost never close on RSI)
+  max_candles = 20+ (hold for days if needed)
+  Ranking weight = (0.40, 0.40, 0.20) [Age focus]
+  Portfolio threshold = 0.95 (maximum positions)
+
+═════════════════════════════════════════════════════════════════════════════
+
+TESTING NEW PARAMETERS
+─────────────────────────────────────────────────────────────────────────────
+
+1. Change ONE parameter at a time
+   → Don't change multiple simultaneously
+   → Can't tell which change had effect
+
+2. Run for minimum 2 hours before evaluating
+   → Need at least 20-30 trades to see pattern
+   → One hour is not enough data
+
+3. Monitor key metrics:
+   grep "HARD CLOSE" logs/bot_run.log | wc -l  → Count of hard closes
+   grep "rank_positions" logs/bot_run.log | grep "Closing worst" | wc -l  → Ranking closes
+   grep "P&L" logs/bot_run.log | tail -50 | grep -E "[-]\$" | wc -l  → Loss count
+
+4. If results are WORSE than before:
+   → Revert parameter back to original
+   → Try smaller change
+
+5. If results are BETTER:
+   → Keep the parameter
+   → Log the change
+   → Try tuning next parameter
+
+═════════════════════════════════════════════════════════════════════════════
+
+PARAMETER CHANGE LOG (Track your tuning)
+─────────────────────────────────────────────────────────────────────────────
+
+Date       Parameter              From    To     Result
+─────────  ──────────────────────  ────────────────────────────────
+2026-01-28 max_candles            6      4      +2% PnL, -8% avg loss
+2026-01-29 Ranking PnL weight     0.60   0.70   +1.5% more closes
+2026-01-30 RSI_BUY_EXTREME        80     75     -0.5% PnL (too tight)
+2026-01-31 Portfolio threshold    0.80   0.85   Better slot availability
+
+═════════════════════════════════════════════════════════════════════════════

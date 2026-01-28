@@ -195,6 +195,48 @@ class MT5Client:
         
         return None
     
+    def ensure_symbol(self, symbol: str) -> bool:
+        """
+        Ensure symbol is available and selected in MT5
+        
+        🔧 CRITICAL: Must be called BEFORE copy_rates_from_pos() to ensure rates exist
+        
+        Args:
+            symbol: Symbol name (e.g., 'EURUSD')
+        
+        Returns:
+            True if symbol is available, False otherwise
+        """
+        if not self.is_connected():
+            logger.warning(f"Cannot ensure symbol {symbol}: MT5 not connected")
+            return False
+        
+        if not MT5_AVAILABLE:
+            # Demo mode - always return True
+            return True
+        
+        try:
+            # First check if symbol is visible in Market Watch
+            symbol_info = mt5.symbol_info(symbol)
+            if symbol_info is None:
+                logger.warning(f"{symbol}: Not found in MT5")
+                return False
+            
+            # If not visible, try to add to Market Watch
+            if not symbol_info.visible:
+                logger.info(f"{symbol}: Hidden in Market Watch, attempting to show...")
+                if not mt5.symbol_select(symbol, True):
+                    logger.error(f"{symbol}: Failed to add to Market Watch")
+                    return False
+                logger.info(f"{symbol}: ✅ Added to Market Watch")
+            else:
+                logger.debug(f"{symbol}: Already visible in Market Watch")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error ensuring symbol {symbol}: {e}")
+            return False
+    
     def get_symbol_info(self, symbol: str) -> Optional[Dict]:
         """
         Get symbol information
@@ -289,10 +331,19 @@ class MT5Client:
             return mock_rates
         
         try:
+            # 🔧 CRITICAL: Ensure symbol is visible/selected BEFORE fetching rates
+            if not self.ensure_symbol(symbol):
+                logger.error(f"{symbol}: Cannot fetch rates - symbol not available in MT5")
+                return None
+            
             if start_time:
                 rates = mt5.copy_rates_from(symbol, timeframe, start_time, count)
             else:
                 rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+            
+            if rates is None or len(rates) == 0:
+                logger.warning(f"{symbol}: No OHLC data returned from MT5 (rates=None or empty)")
+                return None
             
             return rates.tolist() if rates is not None and len(rates) > 0 else None
         except Exception as e:
@@ -332,6 +383,20 @@ class MT5Client:
         except Exception as e:
             logger.error(f"Error getting tick for {symbol}: {e}")
         
+        return None
+
+    def symbol_info_tick(self, symbol: str) -> Optional[Dict]:
+        """Compatibility helper returning symbol_info_tick as dict (or None)."""
+        if not self.is_connected():
+            return None
+        if not MT5_AVAILABLE:
+            return self.get_tick(symbol)
+        try:
+            tick = mt5.symbol_info_tick(symbol)
+            if tick:
+                return tick._asdict()
+        except Exception as e:
+            logger.error(f"Error getting symbol_info_tick for {symbol}: {e}")
         return None
     
     def order_calc_margin(self, order_type: int, symbol: str, volume: float, price: float) -> Optional[float]:

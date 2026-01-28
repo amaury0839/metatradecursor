@@ -254,13 +254,39 @@ class TradingStrategy:
                 signal = "SELL"
                 reasons.append("Scalping: EMA 5/20 a la baja o RSI débil")
 
-            # Evitar operar si RSI en extremos fuertes
+            # 🔥 SMART OVERBOUGHT/OVERSOLD RULES FOR CRYPTO SCALPING
+            # RSI > 75 puede ser oportuno en trend fuerte (momentum)
+            # Pero reducir posición y TP para limitar riesgo
+            is_crypto = any(crypto in symbol.upper() for crypto in ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'LTC', 'AVAX', 'DOGE'])
+            
             if latest['rsi'] >= params['rsi_overbought']:
-                signal = "HOLD"
-                reasons.append("Scalping: RSI sobrecomprado, pausa")
+                # Standard: RSI 70-75 → HOLD (riesgo alto de reversal)
+                if latest['rsi'] < 75:
+                    signal = "HOLD"
+                    reasons.append(f"Scalping: RSI {latest['rsi']:.1f} sobrecomprado, pausa")
+                # 🟢 CRYPTO EXCEPTION: RSI 75+ en trend fuerte → permitir BUY con posición reducida
+                elif is_crypto and latest['trend_bullish'] and latest['rsi'] >= 75:
+                    # Permitir BUY pero con flageos especiales para reducción de posición
+                    if signal != "BUY":
+                        signal = "BUY"
+                        reasons.append(f"CRYPTO SCALP: RSI {latest['rsi']:.1f} overbought pero trend bullish fuerte → SCALP con posición x0.7")
+                    # Mark for position reduction
+                    indicators['crypto_overbought_scalp'] = True
+                    indicators['position_size_multiplier'] = 0.7  # Reduce 30%
+                    indicators['tp_multiplier'] = 0.8  # Reduce TP 20%
+            
             if latest['rsi'] <= params['rsi_oversold']:
-                signal = "HOLD"
-                reasons.append("Scalping: RSI sobrevendido, pausa")
+                if latest['rsi'] > 25:
+                    signal = "HOLD"
+                    reasons.append(f"Scalping: RSI {latest['rsi']:.1f} sobrevendido, pausa")
+                # Similar para oversold: crypto + trend bearish fuerte
+                elif is_crypto and latest['trend_bearish'] and latest['rsi'] <= 25:
+                    if signal != "SELL":
+                        signal = "SELL"
+                        reasons.append(f"CRYPTO SCALP: RSI {latest['rsi']:.1f} oversold pero trend bearish fuerte → SCALP con posición x0.7")
+                    indicators['crypto_oversold_scalp'] = True
+                    indicators['position_size_multiplier'] = 0.7
+                    indicators['tp_multiplier'] = 0.8
 
             # Permitir entradas por pullback en tendencia
             # Buy: tendencia alcista y RSI en zona neutral con retroceso respecto al previo

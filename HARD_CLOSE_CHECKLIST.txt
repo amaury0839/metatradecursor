@@ -1,0 +1,325 @@
+HARD CLOSE RULES - QUICK CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+TODAY'S DEPLOYMENT CHECKLIST
+─────────────────────────────────────────────────────────────────────────────
+
+PRE-DEPLOYMENT (Before starting bot):
+  ☐ Understand the 4 hard rules
+  ☐ Read HARD_CLOSE_QUICK.txt
+  ☐ Verify all documentation files present (7 total)
+  ☐ Know what success looks like
+  ☐ Have terminal open and ready
+
+DEPLOYMENT (Starting the system):
+  ☐ Run: python -m py_compile app/trading/position_manager.py
+  ☐ Expected: Silent (no output = success)
+  ☐ Run: python -m py_compile app/main.py
+  ☐ Expected: Silent (no output = success)
+  ☐ Run: python run_bot.py
+  ☐ Expected: Bot starts, shows "Starting trading bot..."
+
+FIRST 5 MINUTES (Verify it's working):
+  ☐ Watch logs: tail -f logs/bot_run.log
+  ☐ Look for: Position review cycle starting
+  ☐ Look for: First 🔴 HARD CLOSE messages (should appear)
+  ☐ If no HARD CLOSE in 5 min → Check if markets active
+  ☐ Run: grep "holding for recovery" logs/bot_run.log
+  ☐ Expected: Empty (no results = success)
+
+FIRST HOUR (Monitor behavior):
+  ☐ Count 🔴 HARD CLOSE messages
+  ☐ Note which rules trigger (A/B/C)
+  ☐ Watch P&L on closed positions
+  ☐ Verify new trades open after positions close
+  ☐ Check if ranking messages appear
+  ☐ No errors in logs?
+
+AFTER 1 HOUR (Confirm everything):
+  ☐ Bot still running? Yes ✓
+  ☐ Hard closes occurred? Yes ✓
+  ☐ No "holding for recovery"? Correct ✓
+  ☐ New trades entered? Yes ✓
+  ☐ Portfolio balance updated? Yes ✓
+
+═══════════════════════════════════════════════════════════════════════════════
+
+THE 4 HARD RULES - QUICK REFERENCE
+─────────────────────────────────────────────────────────────────────────────
+
+☐ REGLA A: BUY+RSI>80 OR SELL+RSI<20 → CLOSE
+  └─ Trigger: Overbought/oversold
+  └─ Action: Immediate close (no conditions)
+  └─ Log marker: "HARD CLOSE: RSI X > 80"
+
+☐ REGLA B: >6 M15 candles + no profit → CLOSE
+  └─ Trigger: Trade stuck for 90 minutes
+  └─ Action: Close immediately (trade isn't working)
+  └─ Log marker: "HARD CLOSE: 6 candles without profit"
+
+☐ REGLA C: EMA invalid for position type → CLOSE
+  └─ Trigger: Entry signal broken (EMA cross)
+  └─ Action: Close immediately (trend invalidated)
+  └─ Log marker: "HARD CLOSE: EMA_fast crossed"
+
+☐ PRIORIDAD 3: Portfolio 80%+ → Close worst 2 first
+  └─ Trigger: 40+ positions out of 50
+  └─ Action: Rank and close worst (before new trades)
+  └─ Log marker: "Approaching max positions / Closing worst"
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DAILY MONITORING COMMANDS
+─────────────────────────────────────────────────────────────────────────────
+
+Monitor hard closes:
+  $ tail -f logs/bot_run.log | grep "🔴"
+
+Count hard closes today:
+  $ grep "🔴" logs/bot_run.log | wc -l
+
+See which rules triggered:
+  $ grep "HARD CLOSE" logs/bot_run.log | sed 's/.*HARD CLOSE: //' | sort | uniq -c
+
+Verify no "holding for recovery":
+  $ grep "holding for recovery" logs/bot_run.log
+  (Expected: empty)
+
+Check ranking activity:
+  $ grep -E "Approaching max|Closing worst" logs/bot_run.log
+
+See all position closes today:
+  $ grep -i "closed\|close\|exit" logs/bot_run.log | grep -E "EURUSD|GBPUSD" | tail -20
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PARAMETER ADJUSTMENT QUICK GUIDE
+─────────────────────────────────────────────────────────────────────────────
+
+Want MORE closes (stricter rules):
+  1. In position_manager.py:
+     - Change RSI_BUY_EXTREME from 80 to 75
+     - Change max_candles from 6 to 4
+  2. Restart bot: python run_bot.py
+  3. Monitor: grep "🔴" logs/bot_run.log
+
+Want FEWER closes (looser rules):
+  1. In position_manager.py:
+     - Change RSI_BUY_EXTREME from 80 to 85
+     - Change max_candles from 6 to 8
+  2. Restart bot: python run_bot.py
+  3. Monitor: Count closes in logs
+
+Want focus on LOSSES (better ranking):
+  1. In position_manager.py (line ~315):
+     - Change: (pnl × 0.60) to (pnl × 0.75)
+     - Change: (minutes × 0.25) to (minutes × 0.15)
+     - Change: (distance × 0.15) to (distance × 0.10)
+  2. Restart bot
+  3. Verify: Biggest losses close first
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TROUBLESHOOTING QUICK FIXES
+─────────────────────────────────────────────────────────────────────────────
+
+Problem: Bot won't start
+  Fix 1: python -m py_compile app/trading/position_manager.py
+  Fix 2: python -m py_compile app/main.py
+  Fix 3: Check error message in terminal
+  Fix 4: Review HARD_CLOSE_TESTING.txt → Troubleshooting
+
+Problem: No 🔴 HARD CLOSE messages in logs
+  Fix 1: Check if bot is running (ps aux | grep python)
+  Fix 2: Check if positions are open (grep "Entry:" logs/bot_run.log)
+  Fix 3: Check RSI values (grep "RSI:" logs/bot_run.log)
+  Fix 4: May need more time for rules to trigger
+
+Problem: "holding for recovery" message appears
+  Fix 1: Changes didn't apply - verify code in main.py
+  Fix 2: Manually delete the "holding for recovery" line if found
+  Fix 3: Restart bot
+  Fix 4: Verify: grep "holding" logs/bot_run.log (should be empty)
+
+Problem: Too many positions closing (portfolio empty)
+  Fix 1: Increase RSI_BUY_EXTREME to 85
+  Fix 2: Increase max_candles to 8
+  Fix 3: Increase portfolio threshold to 0.90
+  Fix 4: Restart and monitor
+
+Problem: Too few positions closing (stuck trades)
+  Fix 1: Decrease RSI_BUY_EXTREME to 75
+  Fix 2: Decrease max_candles to 4
+  Fix 3: Decrease portfolio threshold to 0.70
+  Fix 4: Restart and monitor
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SUCCESS INDICATORS (What to expect)
+─────────────────────────────────────────────────────────────────────────────
+
+First Hour:
+  ✅ Bot runs without errors
+  ✅ Position review cycle visible in logs every 15 sec
+  ✅ At least 1-2 🔴 HARD CLOSE messages appear
+  ✅ No "holding for recovery" messages
+  ✅ New trades open when slots available
+  ✅ Portfolio P&L showing activity
+
+First Day:
+  ✅ 8-12 hard closes occurred
+  ✅ Positions freed and reused
+  ✅ Mix of all 3 rules triggered (A/B/C)
+  ✅ Ranking closed worst positions first
+  ✅ Overall portfolio healthier than before
+
+First Week:
+  ✅ Average loss per trade reduced (expect -$6 vs old -$15)
+  ✅ More trades per day (expect 18 vs old 12)
+  ✅ P&L improvement visible
+  ✅ No "holding for recovery" behavior
+  ✅ System running smoothly
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FILE LOCATIONS
+─────────────────────────────────────────────────────────────────────────────
+
+Code changes:
+  ☐ app/trading/position_manager.py (4 methods modified/created)
+  ☐ app/main.py (position review section modified)
+
+Documentation:
+  ☐ HARD_CLOSE_QUICK.txt (start here)
+  ☐ HARD_CLOSE_SUMMARY.txt (overview)
+  ☐ HARD_CLOSE_DIAGRAMA.txt (visual flows)
+  ☐ HARD_CLOSE_TESTING.txt (how to test)
+  ☐ HARD_CLOSE_PARAMS.txt (parameter tuning)
+  ☐ HARD_CLOSE_BEFORE_AFTER.txt (real scenarios)
+  ☐ HARD_CLOSE_INDEX.txt (documentation index)
+  ☐ HARD_CLOSE_COMPLETE.txt (project complete summary)
+
+Logs:
+  ☐ logs/bot_run.log (watch for 🔴 messages)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DECISION TREE: WHAT TO DO NOW
+─────────────────────────────────────────────────────────────────────────────
+
+Do you understand the 4 rules?
+  ├─ NO → Read HARD_CLOSE_QUICK.txt
+  └─ YES → Continue
+
+Ready to deploy?
+  ├─ NO → Read HARD_CLOSE_DIAGRAMA.txt or BEFORE_AFTER.txt
+  └─ YES → Continue
+
+Want to start immediately?
+  ├─ YES → python run_bot.py (go!)
+  └─ NO → Read more docs first
+
+Have questions about implementation?
+  ├─ YES → Check HARD_CLOSE_RULES.md
+  └─ NO → Monitor logs and trade
+
+Want to adjust parameters later?
+  ├─ YES → Bookmark HARD_CLOSE_PARAMS.txt
+  └─ NO → Use defaults (they're good)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+1-WEEK TRACKING TEMPLATE
+─────────────────────────────────────────────────────────────────────────────
+
+Day 1:
+  □ Hard closes: __ (expected: 8-12)
+  □ Avg loss: __ (expected: -$8 to -$10)
+  □ Biggest loss: __ (expected: -$15 max)
+  □ Trades: __ (expected: 15-20)
+  □ Problems: None / __
+
+Day 2:
+  □ Hard closes: __ (looking for trend)
+  □ Avg loss: __ (should be consistent)
+  □ Ranking triggered: Yes / No (expected: Yes)
+  □ New patterns: __
+
+Day 3-7:
+  □ Trend visible? Yes / No
+  □ Adjustment needed? Yes / No
+  □ Parameter to adjust: __ (if yes)
+  □ Result after adjustment: __
+
+═══════════════════════════════════════════════════════════════════════════════
+
+QUICK REFERENCE: LOGGING PATTERNS
+─────────────────────────────────────────────────────────────────────────────
+
+When you see this log:      It means:                What to do:
+─────────────────────────────────────────────────────────────────────────────
+🔴 HARD CLOSE: RSI X > 80   Regla A triggered      Normal, system working
+🔴 HARD CLOSE: X candles    Regla B triggered      Normal, freeing stuck trade
+🔴 HARD CLOSE: EMA crossed  Regla C triggered      Normal, respecting trend
+⚠️  Approaching max          Portfolio full         Normal, ranking activating
+🎯 Closing worst #1          Ranking working        Normal, closing loser
+Error: ...                   Something wrong        Review HARD_CLOSE_TESTING.txt
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE YOU TRADE - FINAL CHECKLIST
+─────────────────────────────────────────────────────────────────────────────
+
+Code Status:
+  ☐ position_manager.py contains 4 new hard rule methods
+  ☐ main.py position review section updated
+  ☐ Both files syntax validated
+  ☐ No "holding for recovery" in code
+
+Understanding:
+  ☐ I understand Regla A (RSI extreme)
+  ☐ I understand Regla B (TTL/time limit)
+  ☐ I understand Regla C (EMA invalidation)
+  ☐ I understand Prioridad 3 (ranking)
+
+Documentation:
+  ☐ I have access to all 7 documentation files
+  ☐ I know where HARD_CLOSE_QUICK.txt is
+  ☐ I know how to read logs and identify hard closes
+  ☐ I know how to adjust parameters if needed
+
+Ready:
+  ☐ Terminal open and ready
+  ☐ No other bots running that might conflict
+  ☐ MT5 account verified and ready
+  ☐ I'm ready to deploy
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🚀 LET'S GO!
+
+Ready?
+
+$ python run_bot.py
+
+Expected in logs:
+2026-01-28 02:15:00 Starting trading bot...
+2026-01-28 02:15:05 Connecting to MT5...
+2026-01-28 02:15:10 Connected to account 52704771
+2026-01-28 02:15:15 Position review cycle: Starting
+2026-01-28 02:15:16 EURUSD - Reviewing position
+2026-01-28 02:15:17 🔴 HARD CLOSE: RSI 82 > 80 (overbought)
+2026-01-28 02:15:18 Position closed. Slot freed.
+...
+
+That's success. System is working.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Questions? Check these files:
+  Quick answers → HARD_CLOSE_QUICK.txt
+  Visual explanation → HARD_CLOSE_DIAGRAMA.txt
+  Problem solving → HARD_CLOSE_TESTING.txt
+  Tuning → HARD_CLOSE_PARAMS.txt
+
+═══════════════════════════════════════════════════════════════════════════════

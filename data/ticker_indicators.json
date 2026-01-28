@@ -1,0 +1,62 @@
+{
+  "EURUSD": {
+    "symbol": "EURUSD",
+    "indicators": {
+      "rsi_buy": 35,
+      "rsi_sell": 65,
+      "ema_fast_period": 12,
+      "ema_slow_period": 26,
+      "atr_multiplier": 2.0
+    },
+    "note": "default_configuration",
+    "last_updated": "2026-01-27T18:24:48.321524"
+  },
+  "GBPUSD": {
+    "symbol": "GBPUSD",
+    "indicators": {
+      "rsi_buy": 35,
+      "rsi_sell": 65,
+      "ema_fast_period": 12,
+      "ema_slow_period": 26,
+      "atr_multiplier": 2.0
+    },
+    "note": "default_configuration",
+    "last_updated": "2026-01-27T18:24:48.323522"
+  },
+  "USDJPY": {
+    "symbol": "USDJPY",
+    "indicators": {
+      "rsi_buy": 35,
+      "rsi_sell": 65,
+      "ema_fast_period": 12,
+      "ema_slow_period": 26,
+      "atr_multiplier": 2.0
+    },
+    "note": "default_configuration",
+    "last_updated": "2026-01-27T18:24:48.325524"
+  },
+  "USDCHF": {
+    "symbol": "USDCHF",
+    "indicators": {
+      "rsi_buy": 35,
+      "rsi_sell": 65,
+      "ema_fast_period": 12,
+      "ema_slow_period": 26,
+      "atr_multiplier": 2.0
+    },
+    "note": "default_configuration",
+    "last_updated": "2026-01-27T18:24:48.326523"
+  },
+  "AUDUSD": {
+    "symbol": "AUDUSD",
+    "indicators": {
+      "rsi_buy": 35,
+      "rsi_sell": 65,
+      "ema_fast_period": 12,
+      "ema_slow_period": 26,
+      "atr_multiplier": 2.0
+    },
+    "note": "default_configuration",
+    "last_updated": "2026-01-27T18:24:48.328523"
+  }
+}

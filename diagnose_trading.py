@@ -115,12 +115,12 @@ try:
     symbol = config.trading.default_symbols[0]
     
     # Check risk conditions
-    risk_ok, failures = risk.check_all_risk_conditions(
+    risk_ok, failures, norm_volume = risk.check_all_risk_conditions(
         symbol, "BUY", volume=0.01
     )
     
     if risk_ok:
-        print(f"✅ Risk checks PASSED for {symbol}")
+        print(f"✅ Risk checks PASSED for {symbol} (volume used: {norm_volume})")
     else:
         print(f"❌ Risk checks FAILED for {symbol}")
         for failure in failures:

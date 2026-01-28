@@ -56,8 +56,8 @@ class HistoricalDataLoader:
             
             logger.info(f"Loading {symbol} {timeframe} data from {start_date} to {end_date}")
             
-            # Request data from MT5
-            rates = mt5.copy_rates_range(symbol, tf, start_date, end_date)
+            # Request data from MT5 (using centralized method with ensure_symbol)
+            rates = self.mt5_client.get_rates(symbol, tf, start_time=start_date, count=10000)
             
             if rates is None or len(rates) == 0:
                 logger.error(f"No data returned for {symbol} {timeframe}")
@@ -116,24 +116,40 @@ class HistoricalDataLoader:
             
             tf = self.timeframe_map.get(timeframe, mt5.TIMEFRAME_M15)
             
-            # Get last 10 bars to find latest date
-            latest_bars = mt5.copy_rates_from_pos(symbol, tf, 0, 10)
+            # Get last 10 bars to find latest date (using centralized method)
+            latest_bars = self.mt5_client.get_rates(symbol, tf, count=10)
             if latest_bars is None or len(latest_bars) == 0:
                 return None
             
-            latest_date = datetime.fromtimestamp(latest_bars[-1]['time'])
+            # Handle both dict and tuple formats
+            latest_data = latest_bars[-1]
+            if isinstance(latest_data, dict):
+                latest_date = datetime.fromtimestamp(latest_data['time'])
+            else:
+                latest_date = datetime.fromtimestamp(latest_data[0])
             
             # Try to get data from 2 years ago to find earliest available
             test_start = datetime.now() - timedelta(days=730)
-            earliest_bars = mt5.copy_rates_range(symbol, tf, test_start, test_start + timedelta(days=1))
+            earliest_bars = self.mt5_client.get_rates(symbol, tf, start_time=test_start, count=100)
             
             if earliest_bars is not None and len(earliest_bars) > 0:
-                earliest_date = datetime.fromtimestamp(earliest_bars[0]['time'])
+                earliest_data = earliest_bars[0]
+                if isinstance(earliest_data, dict):
+                    earliest_date = datetime.fromtimestamp(earliest_data['time'])
+                else:
+                    earliest_date = datetime.fromtimestamp(earliest_data[0])
             else:
                 # If no data that far back, try 1 year
                 test_start = datetime.now() - timedelta(days=365)
-                earliest_bars = mt5.copy_rates_range(symbol, tf, test_start, test_start + timedelta(days=1))
-                earliest_date = datetime.fromtimestamp(earliest_bars[0]['time']) if earliest_bars else None
+                earliest_bars = self.mt5_client.get_rates(symbol, tf, start_time=test_start, count=100)
+                if earliest_bars is not None and len(earliest_bars) > 0:
+                    earliest_data = earliest_bars[0]
+                    if isinstance(earliest_data, dict):
+                        earliest_date = datetime.fromtimestamp(earliest_data['time'])
+                    else:
+                        earliest_date = datetime.fromtimestamp(earliest_data[0])
+                else:
+                    earliest_date = None
             
             return (earliest_date, latest_date) if earliest_date else None
             

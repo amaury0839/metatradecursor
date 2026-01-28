@@ -2,6 +2,9 @@
 
 from typing import Literal, List, Optional
 from pydantic import BaseModel, Field, field_validator
+from app.core.logger import setup_logger
+
+logger = setup_logger("schemas")
 
 
 class OrderDetails(BaseModel):
@@ -63,25 +66,41 @@ class TradingDecision(BaseModel):
         """
         Check if decision is valid for execution
         
+        SCALPING RULE: IA NO debe bloquear señal técnica válida
+        - Si action es BUY/SELL → válido incluso si risk_ok=False
+        - risk_ok es un INDICADOR, no un BLOQUEADOR absoluto
+        - Real risk validation happens in check_all_risk_conditions()
+        
         Args:
             min_confidence: Minimum confidence threshold (default 0.30 for aggressive trading)
         
         Returns:
-            True if valid for execution
+            True if valid for execution (action is BUY/SELL)
         """
-        if not self.risk_ok:
-            return False
-        
-        if self.confidence < min_confidence:
-            return False
-        
+        # 🟢 SCALPING: BUY/SELL action is valid regardless of risk_ok
+        # Real risk checks happen later in main.py via check_all_risk_conditions()
         if self.action in ["BUY", "SELL"]:
-            if self.order is None:
-                return False
-            if self.order.volume_lots <= 0:
-                return False
+            # Log if risk_ok=False (warning but not blocking)
+            if not self.risk_ok:
+                logger.warning(
+                    f"Decision valid for execution but risk_ok=False: {self.action} {self.symbol} "
+                    f"(confidence={self.confidence:.2f}). Real risk validation will occur in execution phase."
+                )
+            else:
+                logger.info(f"Decision valid for execution: action={self.action}, confidence={self.confidence:.2f}, risk_ok=True")
+            return True
         
-        return True
+        # HOLD is never executable
+        if self.action == "HOLD":
+            logger.info(f"Decision not valid for execution: HOLD with confidence {self.confidence:.2f}")
+            return False
+        
+        # CLOSE action is valid if we have an order to close
+        if self.action == "CLOSE":
+            return True
+        
+        # Unknown action
+        return False
 
 
 def neutral_decision(symbol: str, timeframe: str) -> "TradingDecision":

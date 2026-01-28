@@ -328,12 +328,15 @@ class HistoricalBacktestEngine:
                     sl_distance = max(atr * self.risk.ATR_MULTIPLIER_SL, min_stop)
                     tp_distance = max(atr * self.risk.ATR_MULTIPLIER_TP, min_stop * 1.2)
                     
-                    # Risk-based position sizing
-                    risk_amount = equity * (ticker_params['risk_per_trade_pct'] / 100)
+                    # 🔥 USE DYNAMIC RISK FROM RISK_CONFIG BASED ON ASSET TYPE
+                    dynamic_risk_pct = self.risk.get_risk_pct_for_symbol(symbol) * 100
+                    risk_amount = equity * (dynamic_risk_pct / 100)
                     volume = min(risk_amount / sl_distance, 1.0)  # Cap at 1 lot
                     volume = max(volume, 0.01)  # Min 0.01 lot
                     # Normalize volume per symbol
                     volume = self.risk.normalize_volume(symbol, volume)
+                    # 🔥 CLAMP TO MINIMUM LOT SIZE (avoid 0.01 trap)
+                    volume = self.risk.clamp_volume_to_minimum(symbol, volume)
                     
                     # Create trade
                     if signal == "BUY":

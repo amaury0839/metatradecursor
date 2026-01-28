@@ -16,8 +16,11 @@ class DatabaseManager:
     
     def __init__(self, db_path: str = "data/trading_history.db"):
         self.db_path = db_path
-        self._lock = threading.Lock()
+        # RLock permite reentrancia cuando save_trade llama a update_trade
+        self._lock = threading.RLock()
+        self._conn: Optional[sqlite3.Connection] = None
         self._ensure_db_directory()
+        self._conn = self._connect()
         self._init_database()
 
     def _connect(self) -> sqlite3.Connection:
@@ -28,8 +31,22 @@ class DatabaseManager:
             timeout=30,
         )
         conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA busy_timeout=5000;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA busy_timeout=10000;")
+        conn.row_factory = sqlite3.Row
         return conn
+
+    def _get_conn(self) -> sqlite3.Connection:
+        """Return a shared connection; recreate if closed/broken."""
+        try:
+            if self._conn is None:
+                self._conn = self._connect()
+            else:
+                # simple health check
+                self._conn.execute("SELECT 1")
+        except Exception:
+            self._conn = self._connect()
+        return self._conn
     
     def _ensure_db_directory(self):
         """Ensure data directory exists"""
@@ -38,7 +55,7 @@ class DatabaseManager:
     def _init_database(self):
         """Initialize database schema"""
         with self._lock:
-            conn = self._connect()
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         # Table: analysis_history - Store all technical/sentiment analysis
@@ -221,13 +238,12 @@ class DatabaseManager:
                          ON web_search_cache(expires_at)""")
         
         conn.commit()
-        conn.close()
         logger.info(f"Database initialized at {self.db_path}")
     
     def save_analysis(self, analysis: Dict[str, Any]) -> int:
         """Save analysis to database"""
         with self._lock:
-            conn = self._connect()
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -273,14 +289,12 @@ class DatabaseManager:
             logger.error(f"Error saving analysis: {e}", exc_info=True)
             conn.rollback()
             return -1
-        finally:
-            conn.close()
     
     def save_ai_decision(self, symbol: str, timeframe: str, decision: Any, 
                         engine_type: str = 'simple', data_sources: List[str] = None) -> int:
         """Save AI decision to database"""
         with self._lock:
-            conn = self._connect()
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -316,13 +330,11 @@ class DatabaseManager:
             logger.error(f"Error saving AI decision: {e}", exc_info=True)
             conn.rollback()
             return -1
-        finally:
-            conn.close()
     
     def save_trade(self, trade_info: Dict[str, Any], ai_decision_id: int = None) -> int:
         """Save trade to database"""
         with self._lock:
-            conn = self._connect()
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -367,50 +379,45 @@ class DatabaseManager:
             logger.error(f"Error saving trade: {e}", exc_info=True)
             conn.rollback()
             return -1
-        finally:
-            conn.close()
     
     def update_trade(self, ticket: int, trade_info: Dict[str, Any]) -> bool:
         """Update existing trade"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        try:
-            cursor.execute("""
-                UPDATE trades SET
-                    close_price = ?,
-                    close_timestamp = ?,
-                    profit = ?,
-                    commission = ?,
-                    swap = ?,
-                    status = ?
-                WHERE ticket = ?
-            """, (
-                trade_info.get('close_price'),
-                trade_info.get('close_timestamp'),
-                trade_info.get('profit'),
-                trade_info.get('commission'),
-                trade_info.get('swap'),
-                trade_info.get('status', 'closed'),
-                ticket
-            ))
-            
-            conn.commit()
-            logger.debug(f"Updated trade {ticket}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating trade: {e}", exc_info=True)
-            conn.rollback()
-            return False
-        finally:
-            conn.close()
+        with self._lock:
+            conn = self._get_conn()
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE trades SET
+                        close_price = ?,
+                        close_timestamp = ?,
+                        profit = ?,
+                        commission = ?,
+                        swap = ?,
+                        status = ?
+                    WHERE ticket = ?
+                """, (
+                    trade_info.get('close_price'),
+                    trade_info.get('close_timestamp'),
+                    trade_info.get('profit'),
+                    trade_info.get('commission'),
+                    trade_info.get('swap'),
+                    trade_info.get('status', 'closed'),
+                    ticket
+                ))
+                
+                conn.commit()
+                logger.debug(f"Updated trade {ticket}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error updating trade: {e}", exc_info=True)
+                conn.rollback()
+                return False
     
     def get_analysis_history(self, symbol: str = None, days: int = 7) -> List[Dict]:
         """Get analysis history"""
         with self._lock:
-            conn = self._connect()
-            conn.row_factory = sqlite3.Row
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -433,14 +440,13 @@ class DatabaseManager:
             return [dict(row) for row in rows]
             
         finally:
-            conn.close()
+            conn.commit()
     
     def get_ai_decisions(self, symbol: str = None, days: int = 7, 
                         executed_only: bool = False) -> List[Dict]:
         """Get AI decisions"""
         with self._lock:
-            conn = self._connect()
-            conn.row_factory = sqlite3.Row
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -463,13 +469,12 @@ class DatabaseManager:
             return [dict(row) for row in rows]
             
         finally:
-            conn.close()
+            conn.commit()
     
     def get_trades(self, symbol: str = None, status: str = None, days: int = 30) -> List[Dict]:
         """Get trades"""
         with self._lock:
-            conn = self._connect()
-            conn.row_factory = sqlite3.Row
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -493,12 +498,12 @@ class DatabaseManager:
             return [dict(row) for row in rows]
             
         finally:
-            conn.close()
+            conn.commit()
     
     def get_performance_summary(self, days: int = 30) -> Dict[str, Any]:
         """Get performance summary"""
         with self._lock:
-            conn = self._connect()
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -544,12 +549,12 @@ class DatabaseManager:
             }
             
         finally:
-            conn.close()
+            conn.commit()
     
     def mark_decision_executed(self, decision_id: int):
         """Mark AI decision as executed"""
         with self._lock:
-            conn = self._connect()
+            conn = self._get_conn()
             cursor = conn.cursor()
         
         try:
@@ -561,9 +566,10 @@ class DatabaseManager:
             
             conn.commit()
             logger.debug(f"Marked decision {decision_id} as executed")
-            
-        finally:
-            conn.close()
+
+        except Exception as e:
+            logger.error(f"Error marking decision {decision_id} as executed: {e}", exc_info=True)
+            conn.rollback()
 
 
 # Global instance
@@ -576,3 +582,8 @@ def get_database_manager() -> DatabaseManager:
     if _db_manager is None:
         _db_manager = DatabaseManager()
     return _db_manager
+
+
+def get_database() -> DatabaseManager:
+    """Backward-compatible alias"""
+    return get_database_manager()

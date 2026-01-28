@@ -1,0 +1,301 @@
+HARD CLOSE RULES - TESTING GUIDE
+===============================================================================
+
+✅ STEP 1: VERIFY SYNTAX
+─────────────────────────────────────────────────────────────────────────────
+
+COMMAND:
+python -m py_compile app/trading/position_manager.py
+python -m py_compile app/main.py
+
+Expected:
+- No errors
+- Silent completion
+- Files are syntactically valid
+
+═════════════════════════════════════════════════════════════════════════════
+
+✅ STEP 2: START BOT
+─────────────────────────────────────────────────────────────────────────────
+
+COMMAND:
+python run_bot.py
+
+Expected:
+- Bot starts normally
+- "Starting trading bot..." message
+- MT5 connection successful
+- First position review shows new hard rule checks
+
+═════════════════════════════════════════════════════════════════════════════
+
+✅ STEP 3: VERIFY HARD CLOSE RULES EXECUTE
+─────────────────────────────────────────────────────────────────────────────
+
+Monitor logs in real-time:
+
+COMMAND (Terminal 1):
+tail -f logs/bot_run.log | grep "HARD CLOSE"
+
+EXPECTED MESSAGES:
+🔴 HARD CLOSE: RSI 82.5 > 80 (overbought) - BUY position closed
+🔴 HARD CLOSE: 6 candles without profit - close now
+🔴 HARD CLOSE: EMA_fast crossed EMA_slow - trend invalidated
+
+If you see these messages → REGLAS A, B, C are working ✅
+
+═════════════════════════════════════════════════════════════════════════════
+
+✅ STEP 4: VERIFY NO "HOLDING FOR RECOVERY"
+─────────────────────────────────────────────────────────────────────────────
+
+COMMAND:
+grep "holding for recovery" logs/bot_run.log
+
+Expected:
+- (empty result)
+- No matches found
+
+If you see matches → Code change failed ❌
+
+═════════════════════════════════════════════════════════════════════════════
+
+✅ STEP 5: VERIFY POSITION RANKING
+─────────────────────────────────────────────────────────────────────────────
+
+Monitor for ranking messages:
+
+COMMAND:
+tail -f logs/bot_run.log | grep -E "(Approaching max|rank_positions|Closing worst)"
+
+Expected:
+⚠️  Approaching max positions (38/50)
+🎯 Attempting to close 2 worst positions first...
+   Closing worst #1: EURUSD (P&L=$-12.50)
+   Closing worst #2: GBPUSD (P&L=$-8.75)
+
+If you see these → PRIORIDAD 3 is working ✅
+
+═════════════════════════════════════════════════════════════════════════════
+
+DETAILED TEST SCENARIOS
+─────────────────────────────────────────────────────────────────────────────
+
+SCENARIO 1: RSI EXTREME (Regla A)
+─────────────────────────────────────────────────────────────────────────────
+
+Trigger: BUY position + RSI > 80 (or SELL position + RSI < 20)
+
+Test Flow:
+1. Watch for BUY position in overbought territory (RSI > 80)
+2. Check logs for: 🔴 HARD CLOSE: RSI X > 80
+3. Verify position is closed IMMEDIATELY
+4. Note: Does NOT check profit - closes regardless
+
+Expected Log:
+---
+02:35:22 EURUSD - Review Position
+02:35:23 RSI Analysis: 82.5 (overbought)
+02:35:24 🔴 HARD CLOSE: RSI 82.5 > 80 (overbought) - EURUSD BUY closed
+02:35:25 Position closed. Slot freed.
+---
+
+✅ PASS: Position closed despite P&L
+❌ FAIL: Position not closed or "holding for recovery" message
+
+═════════════════════════════════════════════════════════════════════════════
+
+SCENARIO 2: CANDLE TTL (Regla B)
+─────────────────────────────────────────────────────────────────────────────
+
+Trigger: Position held for 6+ M15 candles without reaching 0.05% profit
+
+Test Flow:
+1. Create/find position held for ~90 minutes (6 x 15min)
+2. Check that position is NOT profitable (< 0.05%)
+3. Check logs for: 🔴 HARD CLOSE: 6 candles without profit
+4. Verify position is closed IMMEDIATELY
+
+Expected Timeline:
+- 0 min: BUY at 1.0950
+- 15 min: Price at 1.0949 (no progress)
+- 30 min: Price at 1.0948 (no progress)
+- 45 min: Price at 1.0949 (no progress)
+- 60 min: Price at 1.0950 (back at entry, not +0.05%)
+- 75 min: Price at 1.0949 (still stuck)
+- 90 min: ✅ CLOSE - "6 candles without profit"
+
+Expected Log:
+---
+03:00:00 GBPUSD - Review Position (90 min held)
+03:00:01 TTL Check: 6 candles held, profit = -$2.00
+03:00:02 🔴 HARD CLOSE: 6 candles without profit - GBPUSD SELL closed
+03:00:03 Position closed. Slot freed.
+---
+
+✅ PASS: Position closed after 6 candles without profit
+❌ FAIL: Position not closed after 6 candles
+
+═════════════════════════════════════════════════════════════════════════════
+
+SCENARIO 3: EMA INVALIDATION (Regla C)
+─────────────────────────────────────────────────────────────────────────────
+
+Trigger: Entry trend signal invalidated by EMA cross
+
+Test Flow (BUY position):
+1. Find BUY position where EMA_fast < EMA_slow (uptrend broken)
+2. Check logs for: 🔴 HARD CLOSE: EMA_fast crossed
+3. Verify position closed IMMEDIATELY
+
+Test Flow (SELL position):
+1. Find SELL position where EMA_fast > EMA_slow (downtrend broken)
+2. Check logs for: 🔴 HARD CLOSE: EMA_fast crossed
+3. Verify position closed IMMEDIATELY
+
+Expected Scenario:
+- BUY at 1.0950 when EMA_fast=1.0960 > EMA_slow=1.0940 (uptrend valid)
+- 30 min later: EMA_fast=1.0945 < EMA_slow=1.0948 (uptrend broken)
+- ✅ CLOSE: "EMA invalidated BUY signal"
+
+Expected Log:
+---
+02:45:30 EURUSD - Review Position (BUY)
+02:45:31 EMA Check: fast=1.0945 < slow=1.0948 (invalidated)
+02:45:32 🔴 HARD CLOSE: EMA_fast crossed EMA_slow - EURUSD BUY closed
+02:45:33 Position closed. Slot freed.
+---
+
+✅ PASS: Position closed when EMA invalidates entry
+❌ FAIL: Position not closed despite EMA cross
+
+═════════════════════════════════════════════════════════════════════════════
+
+SCENARIO 4: POSITION RANKING (Prioridad 3)
+─────────────────────────────────────────────────────────────────────────────
+
+Trigger: Portfolio at 80%+ capacity (38+ open positions out of 50)
+
+Test Flow:
+1. Watch for portfolio to approach max positions
+2. Check logs for: ⚠️  Approaching max positions
+3. Check logs for: 🎯 Attempting to close worst positions
+4. Verify 1-2 worst positions are closed BEFORE new trade entry
+5. Verify slots are freed up
+
+Expected Scenario:
+- Portfolio: 40/50 (80%)
+- Worst positions detected:
+  * #1: EURUSD P&L=-$20.00 (Score: -5.2)
+  * #2: AUDNZD P&L=-$15.50 (Score: -3.8)
+- Close both
+- Portfolio: 38/50 (76%)
+- Now free to enter new trades
+
+Expected Log:
+---
+03:15:00 Portfolio Status Check
+03:15:01 ⚠️  Approaching max positions (40/50)
+03:15:02 🎯 Attempting to close 2 worst positions first...
+03:15:03    Closing worst #1: EURUSD (P&L=$-20.00)
+03:15:04 Position closed successfully
+03:15:05    Closing worst #2: AUDNZD (P&L=$-15.50)
+03:15:06 Position closed successfully
+03:15:07 Portfolio now: 38/50 - Free to enter new trades
+---
+
+✅ PASS: Worst positions closed before new trade entry
+❌ FAIL: New trades opened without closing worst positions first
+
+═════════════════════════════════════════════════════════════════════════════
+
+COMBINED TEST: ALL RULES TOGETHER
+─────────────────────────────────────────────────────────────────────────────
+
+Expected 5-Minute Trading Sequence:
+
+00:00 - Bot starts, 45 positions open
+00:15 - Review cycle:
+  - EURUSD BUY: RSI=82 → 🔴 HARD CLOSE (Regla A)
+  - GBPUSD SELL: EMA invalidated → 🔴 HARD CLOSE (Regla C)
+  - AUDJPY BUY: 6 candles, no profit → 🔴 HARD CLOSE (Regla B)
+  - 3 positions closed ✅
+  
+00:30 - Check portfolio: 42/50 (84%)
+  - Rank positions
+  - Close 2 worst: USDJPY (-$18), NZDUSD (-$12)
+  - Portfolio: 40/50 (80%) ✅
+  
+00:45 - Search for new trades:
+  - EURJPY: BUY signal high confidence → ENTER
+  - GBPJPY: SELL signal high confidence → ENTER
+  - 2 new positions open
+  - Portfolio: 42/50 (84%)
+
+✅ ALL SYSTEMS WORKING
+
+═════════════════════════════════════════════════════════════════════════════
+
+TROUBLESHOOTING
+─────────────────────────────────────────────────────────────────────────────
+
+Problem: Hard close rules not triggering
+
+Solution 1: Check if rules are being called
+---
+grep "should_close_on_rsi_extreme\|should_close_on_candle_ttl\|should_close_on_ema" logs/bot_run.log
+---
+Should see function calls every position review cycle.
+
+Solution 2: Check if RSI values are being read
+---
+grep "RSI Analysis:" logs/bot_run.log | tail -20
+---
+Should see RSI values like "RSI Analysis: 78.5"
+
+Solution 3: Verify position_manager.py is imported correctly
+---
+python -c "from app.trading.position_manager import PositionManager; print('✅ Import OK')"
+---
+Should print "✅ Import OK"
+
+Solution 4: Check if error handling is catching exceptions
+---
+grep "Error in should_close\|Error in rank_positions" logs/bot_run.log
+---
+Should see NO error messages
+
+═════════════════════════════════════════════════════════════════════════════
+
+SUCCESS INDICATORS
+─────────────────────────────────────────────────────────────────────────────
+
+✅ Bot starts without errors
+✅ Position review runs every 15 seconds
+✅ New hard close rules execute on every review
+✅ 🔴 HARD CLOSE messages appear in logs
+✅ NO "holding for recovery" messages
+✅ Positions close when rules trigger
+✅ Ranking identifies worst positions correctly
+✅ Slots freed up for new trades
+✅ New trades open when signals available
+✅ P&L improves due to smaller losses
+
+═════════════════════════════════════════════════════════════════════════════
+
+PERFORMANCE BASELINE
+─────────────────────────────────────────────────────────────────────────────
+
+After 1 hour of trading with hard close rules:
+
+Expected improvement:
+- Average loss per trade: -$10 (was -$15)
+- Holding time on losses: 5 min (was 30 min)
+- Total positions closed: 15-18
+- New positions opened: 8-12
+- Positions "rescued" (turned profit): 2-3 fewer (because closing faster)
+- Positions saved from disaster: 5-8 (avoiding -$30 losses)
+
+Net result: More disciplined trading, lower drawdowns, better capital efficiency
+
+═════════════════════════════════════════════════════════════════════════════

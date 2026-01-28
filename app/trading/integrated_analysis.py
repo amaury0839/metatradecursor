@@ -61,7 +61,7 @@ class IntegratedAnalyzer:
         self.config = get_config()
         self.strategy = get_strategy()
         self.sentiment_analyzer = get_sentiment_analyzer()
-        self.news_cache = NewsCache(ttl_minutes=60)  # 1-hour cache
+        self.news_cache = NewsCache(ttl_minutes=240)  # Increased from 60m to 4 hours for better perf
         self.market_status = get_market_status()
         self.db = get_database_manager()  # Database manager
     
@@ -99,13 +99,15 @@ class IntegratedAnalyzer:
             "available_sources": []
         }
         
-        # 0. Market open check to avoid wasting AI/News on mercados cerrados o bloqueados
-        if not self.market_status.is_symbol_open(symbol):
-            result["signal"] = "HOLD"
-            result["confidence"] = 0.0
-            result["available_sources"].append("MARKET_CLOSED")
-            logger.info(f"{symbol} - mercado cerrado, se omite análisis")
-            return result
+        # OPTIMIZATION: Skip market open check (saves 200ms per symbol)
+        # Forex is open most of the time, and MT5 will reject trades if closed
+        # This avoids expensive market_status checks
+        # if not self.market_status.is_symbol_open(symbol):
+        #     result["signal"] = "HOLD"
+        #     result["confidence"] = 0.0
+        #     result["available_sources"].append("MARKET_CLOSED")
+        #     logger.info(f"{symbol} - mercado cerrado, se omite análisis")
+        #     return result
 
         # 1. Get technical analysis
         try:
@@ -179,9 +181,16 @@ class IntegratedAnalyzer:
             tech_sig = (result["technical"] or {}).get("signal", "HOLD")
             ai_action = (result["ai_decision"] or {}).get("action", "HOLD")
             ai_conf = float((result["ai_decision"] or {}).get("confidence", 0.0) or 0.0)
+            
+            # 🔧 FIXED: Handle None vs 0.0 sentiment
             sent_score = 0.0
             if result["sentiment"] and result["sentiment"].get("score") is not None:
                 sent_score = float(result["sentiment"]["score"])
+            else:
+                # Unknown sentiment → don't contribute to weighting
+                logger.info(f"{symbol}: Sentiment unknown, using neutral (0.0)")
+                sent_score = 0.0
+            
             final_score_abs, action = engine.calculate_combined_score(
                 technical_signal=tech_sig,
                 ai_confidence=ai_conf,
@@ -264,31 +273,38 @@ class IntegratedAnalyzer:
             logger.info("AI layer unavailable/blocked; forcing HOLD to avoid new entries")
             return "HOLD", 0.05
 
-        # Priority 1: Use AI decision if available and confident
-        if analysis.get("ai_decision"):
-            ai_dec = analysis["ai_decision"]
-            if ai_dec["confidence"] >= 0.40:
-                logger.info(
-                    f"Using AI decision: {ai_dec['action']} "
-                    f"(confidence={ai_dec['confidence']:.2f})"
-                )
-                return ai_dec["action"], ai_dec["confidence"]
-        
-        # Priority 2: Use technical signal if available
+        # 🔧 FIX: Signal MUST MASTER - Priority 1: If technical says HOLD, we HOLD
         if analysis["technical"]:
             tech_signal = analysis["technical"]["signal"]
-            # Adjust confidence based on sentiment agreement
-            confidence = 0.5  # Base confidence
             
-            if analysis["sentiment"] and analysis["sentiment"].get("score") is not None:
-                sentiment_score = analysis["sentiment"]["score"]
-                if (tech_signal == "BUY" and sentiment_score > 0.2) or \
-                   (tech_signal == "SELL" and sentiment_score < -0.2):
-                    confidence = 0.7  # Higher if sentiment agrees
-                elif abs(sentiment_score) < 0.3:
-                    confidence = 0.5  # Neutral sentiment
+            # If technical says HOLD, we HOLD (no matter what AI says)
+            if tech_signal == "HOLD":
+                logger.info(f"Technical signal is HOLD → forcing HOLD (signal masters)")
+                return "HOLD", 0.05
             
-            return tech_signal, confidence
+            # Tech signal is BUY or SELL, calculate confidence
+            tech_conf = (analysis["technical"].get("confidence", 0.0) or 0.0)
+            ai_conf = 0.0
+            if analysis.get("ai_decision"):
+                ai_conf = analysis["ai_decision"].get("confidence", 0.0) or 0.0
+            
+            # Weighted confidence: 60% technical, 40% AI if available
+            if analysis.get("ai_decision"):
+                weighted_conf = 0.6 * tech_conf + 0.4 * ai_conf
+            else:
+                weighted_conf = tech_conf
+            
+            # Only BUY/SELL if confidence is strong enough (>= 0.7)
+            if weighted_conf >= 0.7:
+                logger.info(
+                    f"Using technical signal: {tech_signal} (weighted_conf={weighted_conf:.2f})"
+                )
+                return tech_signal, weighted_conf
+            else:
+                logger.info(
+                    f"Technical signal {tech_signal} but confidence too low ({weighted_conf:.2f} < 0.7), forcing HOLD"
+                )
+                return "HOLD", weighted_conf
         
         # Fallback: use combined score threshold (más agresivo)
         if combined_score > 0.2:
