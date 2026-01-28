@@ -263,24 +263,37 @@ if __name__ == "__main__":
     # Run trading loop every 60 seconds (infinite loop)
     import time
     import logging
+    import sys
     from app.core.logger import setup_logger
     
     logging.basicConfig(level=logging.INFO)
     logger = setup_logger("trading_loop_runner")
     logger.info("🚀 Trading loop started (continuous mode - 60s interval)")
     
-    try:
-        while True:
-            try:
-                main_trading_loop()
-                logger.info("⏸️  Waiting 60 seconds before next cycle...")
-                time.sleep(60)  # Wait 60 seconds before next iteration
-            except KeyboardInterrupt:
-                logger.info("⏹️  Trading loop interrupted by user")
-                break
-            except Exception as e:
-                logger.error(f"Error in trading loop iteration: {e}", exc_info=True)
-                logger.info("⏸️  Waiting 60 seconds before retry...")
-                time.sleep(60)  # Wait before retry on error
-    except Exception as e:
-        logger.error(f"Fatal error in trading loop: {e}", exc_info=True)
+    cycle_count = 0
+    error_count = 0
+    
+    while True:
+        try:
+            cycle_count += 1
+            logger.info(f"📊 Cycle #{cycle_count} starting...")
+            main_trading_loop()
+            logger.info("⏸️  Waiting 60 seconds before next cycle...")
+            error_count = 0  # Reset error count on successful cycle
+            time.sleep(60)  # Wait 60 seconds before next iteration
+        except KeyboardInterrupt:
+            logger.info("⏹️  Trading loop interrupted by user")
+            sys.exit(0)
+        except (SystemExit, EOFError):
+            # Don't treat system exit as an error - just log and continue
+            logger.warning("⚠️  System interrupt detected, but continuing...")
+            logger.info("⏸️  Waiting 60 seconds before retry...")
+            time.sleep(60)
+        except Exception as e:
+            error_count += 1
+            logger.error(f"Error in trading loop iteration #{cycle_count}: {e}", exc_info=True)
+            if error_count >= 5:
+                logger.error(f"❌ Too many consecutive errors ({error_count}), exiting...")
+                sys.exit(1)
+            logger.info(f"⏸️  Waiting 60 seconds before retry... (error #{error_count})")
+            time.sleep(60)  # Wait before retry on error
