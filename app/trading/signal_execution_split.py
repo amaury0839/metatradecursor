@@ -75,6 +75,13 @@ def split_decision(
     This is the core refactoring: you can have a clear BUY signal
     but insufficient execution confidence to actually open the trade.
     
+    ⚠️  CRITICAL: KILL SWITCH gate
+    If execution_confidence < MIN_EXECUTION_CONFIDENCE (0.55):
+        - DO NOT execute trade
+        - DO NOT validate stops
+        - DO NOT calculate sizing
+        - Log: CONFIDENCE_TOO_LOW
+    
     Args:
         signal_direction: BUY, SELL, HOLD from technical analysis
         signal_strength: How clear (0.0-1.0)
@@ -102,16 +109,27 @@ def split_decision(
     logger.info(f"  ✓ Signal direction: {signal.direction} (strength={signal.strength:.2f})")
     
     # STEP 2: Calculate execution confidence (separate from direction)
-    # If AI not called, its score is 0
+    # ⚠️  CRITICAL: AI NEVER adds confidence bonuses
+    # AI can only: confirm (allow), reject (block), or abstain (NO_OP)
+    # If AI decision is HOLD or confidence < threshold: AI must not influence execution
+    
     if not ai_call_made:
         ai_score = 0.0
         ai_weight = 0.0  # AI doesn't contribute if not called
-        logger.info(f"  ℹ️  AI not called, weight=0")
+        logger.info(f"  ℹ️  AI not called, weight=0 (AI NEVER adds bonuses)")
     else:
-        ai_weight = 0.25
-        logger.info(f"  ✓ AI called, score={ai_score:.2f}")
+        # AI confirmation: use score
+        # AI rejection (HOLD): score forced to 0 (no bonus)
+        # AI abstain: use score conservatively
+        if ai_action == "HOLD":
+            ai_score = 0.0  # AI says HOLD: cannot boost confidence
+            ai_weight = 0.0
+            logger.info(f"  ⏹️  AI says HOLD: score set to 0 (no bonus allowed)")
+        else:
+            ai_weight = 0.25
+            logger.info(f"  ✓ AI called, action={ai_action}, score={ai_score:.2f}")
     
-    # Weighted confidence
+    # Weighted confidence (NO AI BONUSES - only confirmation)
     execution_confidence = (
         0.60 * technical_score +
         ai_weight * ai_score +
@@ -128,12 +146,18 @@ def split_decision(
         f"0.15*{max(0.0, sentiment_score):.2f} = {execution_confidence:.2f}"
     )
     
-    # STEP 3: Make execution decision (HARD GATE)
+    # STEP 3: KILL SWITCH GATE (HARD GATE - NON-NEGOTIABLE)
+    # If confidence < MIN_EXECUTION_CONFIDENCE:
+    # - DO NOT execute
+    # - DO NOT validate stops
+    # - DO NOT calculate sizing
+    # - Log: CONFIDENCE_TOO_LOW
+    
     should_exec = execution_confidence >= min_exec_confidence
     
     required_checks = {
         "technical_signal": signal_direction in ["BUY", "SELL"],
-        "confidence_threshold": execution_confidence >= min_exec_confidence,
+        "confidence_threshold": execution_confidence >= min_exec_confidence,  # KILL SWITCH
         "ai_approved": True,  # Will be set by caller after risk checks
         "spread_ok": True,    # Will be set by caller
         "stops_valid": True,  # Will be set by caller
@@ -146,9 +170,13 @@ def split_decision(
         skip_reason = None
         logger.info(f"  ✅ EXECUTE: {exec_reason}")
     else:
+        # KILL SWITCH activated: no trade execution under any circumstances
         skip_reason = f"CONFIDENCE_TOO_LOW ({execution_confidence:.2f} < {min_exec_confidence:.2f})"
         exec_reason = f"Cannot execute: {skip_reason}"
-        logger.info(f"  ❌ SKIP: {skip_reason}")
+        logger.critical(f"  🔴 KILL SWITCH ACTIVATED: {skip_reason}")
+        logger.critical(f"     → DO NOT execute trade")
+        logger.critical(f"     → DO NOT validate stops")
+        logger.critical(f"     → DO NOT calculate sizing")
     
     execution = ExecutionDecision(
         should_execute=should_exec,
