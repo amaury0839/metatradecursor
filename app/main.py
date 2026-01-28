@@ -18,7 +18,7 @@ from app.core.database import get_database_manager
 from app.trading.mt5_client import get_mt5_client
 from app.trading.integrated_analysis import get_integrated_analyzer
 from app.trading.market_status import get_market_status
-from app.ui.pages_dashboard import render_dashboard
+from app.ui.pages_dashboard_unified import render_dashboard
 from app.ui.pages_config import render_config
 from app.ui.pages_strategy import render_strategy
 from app.ui.pages_risk import render_risk
