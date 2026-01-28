@@ -207,8 +207,9 @@ def main_trading_loop():
                         symbol, timeframe, signal, analysis.get("technical", {}).get("data", {})
                     )
                 
-                # Check execution confidence
-                execution_confidence = decision.confidence if hasattr(decision, 'confidence') else tech_confidence
+                # Check execution confidence - use tech_confidence always (from weighted calculation)
+                # For AI calls, decision.confidence is Gemini's raw score; we use tech_confidence instead
+                execution_confidence = tech_confidence  # Always use technical confidence
                 if execution_confidence < MIN_EXECUTION_CONFIDENCE:
                     logger.info(f"⏭️  {symbol}: Confidence too low ({execution_confidence:.2f} < {MIN_EXECUTION_CONFIDENCE})")
                     log_skip_reason(symbol, "CONFIDENCE_TOO_LOW")
