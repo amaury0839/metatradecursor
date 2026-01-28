@@ -239,7 +239,27 @@ def main_trading_loop():
 
 
 if __name__ == "__main__":
-    # For testing only
+    # Run trading loop every 60 seconds (infinite loop)
+    import time
     import logging
+    from app.core.logger import setup_logger
+    
     logging.basicConfig(level=logging.INFO)
-    main_trading_loop()
+    logger = setup_logger("trading_loop_runner")
+    logger.info("🚀 Trading loop started (continuous mode - 60s interval)")
+    
+    try:
+        while True:
+            try:
+                main_trading_loop()
+                logger.info("⏸️  Waiting 60 seconds before next cycle...")
+                time.sleep(60)  # Wait 60 seconds before next iteration
+            except KeyboardInterrupt:
+                logger.info("⏹️  Trading loop interrupted by user")
+                break
+            except Exception as e:
+                logger.error(f"Error in trading loop iteration: {e}", exc_info=True)
+                logger.info("⏸️  Waiting 60 seconds before retry...")
+                time.sleep(60)  # Wait before retry on error
+    except Exception as e:
+        logger.error(f"Fatal error in trading loop: {e}", exc_info=True)
