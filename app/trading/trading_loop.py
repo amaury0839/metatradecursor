@@ -279,17 +279,16 @@ if __name__ == "__main__":
     class State:
         shutdown = False
     
-    # Signal handler for graceful shutdown
+    # Signal handler for graceful shutdown (ONLY for SIGINT from user)
     def handle_interrupt(signum, frame):
-        State.shutdown = True
-        logger.info("⏹️  Shutdown signal received...")
+        # Only shutdown on explicit Ctrl+C (SIGINT)
+        # Ignore SIGTERM from system/environment
+        if signum == signal.SIGINT:
+            State.shutdown = True
+            logger.info("⏹️  Shutdown signal received (Ctrl+C)...")
     
-    # Register signal handlers
+    # Register ONLY SIGINT handler (ignore SIGTERM to prevent external kills)
     signal.signal(signal.SIGINT, handle_interrupt)
-    try:
-        signal.signal(signal.SIGTERM, handle_interrupt)
-    except (AttributeError, ValueError):
-        pass  # SIGTERM may not be available on all platforms
     
     while not State.shutdown:
         try:
