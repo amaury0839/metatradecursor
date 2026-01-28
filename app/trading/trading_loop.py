@@ -304,9 +304,6 @@ if __name__ == "__main__":
                     break
                 time.sleep(1)
                 
-        except KeyboardInterrupt:
-            logger.info("⏹️  Trading loop interrupted by user (KeyboardInterrupt)")
-            State.shutdown = True
         except (SystemExit, EOFError) as e:
             # Log but continue unless it's a critical error
             logger.warning(f"⚠️  System signal detected: {type(e).__name__}, continuing...")
