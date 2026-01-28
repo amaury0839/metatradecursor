@@ -166,25 +166,33 @@ def main_trading_loop():
                     logger.info(f"⏭️  {symbol}: {trade_error}")
                     continue
                 
-                # Get analysis
-                analysis = integrated_analyzer.analyze_symbol(symbol, timeframe)
-                signal = analysis["signal"]
+                # ============================================================
+                # GATE DECISION #1: Determine AI involvement BEFORE analysis
+                # This gate controls whether AI is consulted during analyze_symbol()
+                # ============================================================
+                # First, get technical data WITHOUT AI
+                preliminary_analysis = integrated_analyzer.analyze_symbol(symbol, timeframe, skip_ai=True)
+                signal = preliminary_analysis["signal"]
                 
                 if signal == "HOLD":
                     logger.info(f"⏭️  {symbol}: HOLD signal")
                     continue
                 
-                # ============================================================
-                # SINGLE DECISION GATE: Determine AI involvement ONCE
-                # ============================================================
+                tech_data = preliminary_analysis.get("technical", {}).get("data", {})
                 tech_confidence = 0.75 if signal in ["BUY", "SELL"] else 0.0
-                tech_data = analysis.get("technical", {}).get("data", {})
+                rsi_value = tech_data.get("rsi", 50.0)
+                
+                # Check RSI_OVERBOUGHT BLOCK (before AI gate)
+                if signal == "BUY" and rsi_value >= RSI_OVERBOUGHT:
+                    logger.info(f"⏭️  {symbol}: RSI_BLOCK (RSI={rsi_value:.0f} >= {RSI_OVERBOUGHT} for BUY)")
+                    log_skip_reason(symbol, "RSI_BLOCK_BUY_OVERBOUGHT")
+                    continue
                 
                 # Evaluate if signal is strong enough to skip AI
                 should_call_ai_value, ai_gate_reason = should_call_ai(
                     technical_signal=signal,
                     signal_strength=tech_confidence,
-                    rsi_value=tech_data.get("rsi", 50.0),
+                    rsi_value=rsi_value,
                     trend_status="bullish" if signal == "BUY" else ("bearish" if signal == "SELL" else "neutral"),
                     ema_distance=abs(tech_data.get("ema_fast", 0) - tech_data.get("ema_slow", 0)) * 10000
                 )
@@ -194,7 +202,10 @@ def main_trading_loop():
                 # ============================================================
                 if should_call_ai_value:
                     # PATH A: Signal is weak/ambiguous → consult AI
-                    logger.info(f"🧠 {symbol} | GATE_DECISION: AI_CALLED (weak signal)")
+                    logger.info(f"🧠 {symbol} | GATE_DECISION: AI_CALLED (weak signal - {ai_gate_reason})")
+                    # Re-analyze WITH AI enabled
+                    analysis = integrated_analyzer.analyze_symbol(symbol, timeframe, skip_ai=False)
+                    
                     decision, _, _ = decision_engine.make_decision(
                         symbol, timeframe, signal, analysis.get("technical", {}).get("data", {})
                     )
@@ -203,6 +214,8 @@ def main_trading_loop():
                 else:
                     # PATH B: Signal is strong → skip AI entirely
                     logger.info(f"⚡ {symbol} | GATE_DECISION: AI_SKIPPED ({ai_gate_reason})")
+                    # Use analysis without AI
+                    analysis = preliminary_analysis
                     decision = TradingDecision(
                         action=signal,
                         confidence=tech_confidence,

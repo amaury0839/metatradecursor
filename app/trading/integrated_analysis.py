@@ -69,7 +69,8 @@ class IntegratedAnalyzer:
         self,
         symbol: str,
         timeframe: str = "M15",
-        use_enhanced_ai: bool = True
+        use_enhanced_ai: bool = True,
+        skip_ai: bool = False
     ) -> Dict[str, Any]:
         """
         Perform integrated analysis on symbol
@@ -78,6 +79,7 @@ class IntegratedAnalyzer:
             symbol: Trading symbol
             timeframe: Chart timeframe
             use_enhanced_ai: Use enhanced AI decision engine (default True)
+            skip_ai: If True, skip AI consultation entirely (default False)
         
         Returns dict with keys:
         - technical: RSI, EMA, trend data
@@ -148,7 +150,10 @@ class IntegratedAnalyzer:
             logger.warning(f"Sentiment analysis failed for {symbol}: {e}")
         
         # 3. Get AI decision (enhanced or simple)
-        if use_enhanced_ai:
+        # 🔧 NEW: Skip AI if skip_ai=True (gate decision made earlier)
+        if skip_ai:
+            logger.info(f"{symbol} - AI SKIPPED (by gate decision)")
+        elif use_enhanced_ai:
             try:
                 ai_decision = make_smart_decision(
                     symbol=symbol,
