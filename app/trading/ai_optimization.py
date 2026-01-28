@@ -51,35 +51,29 @@ def should_call_ai(
     # STRONG SIGNAL: Skip AI (waste of latency)
     if signal_strength >= 0.75 and technical_signal in ["BUY", "SELL"]:
         reason = f"Strong signal (strength={signal_strength:.2f}), skip AI"
-        logger.info(f"  ⏭️  NO AI CALL: {reason}")
         return False, reason
     
     # CLEAR TREND: Skip AI
     if ema_distance > 50 and trend_status in ["bullish", "bearish"]:
         reason = f"Clear trend ({trend_status}, EMA distance={ema_distance:.1f} pips), skip AI"
-        logger.info(f"  ⏭️  NO AI CALL: {reason}")
         return False, reason
     
     # RSI EXTREME: Skip AI (too much noise)
     if rsi_value > 75 or rsi_value < 25:
         reason = f"RSI extreme ({rsi_value:.0f}), skip AI"
-        logger.info(f"  ⏭️  NO AI CALL: {reason}")
         return False, reason
     
     # WEAK SIGNAL: Call AI as arbitrator
     if signal_strength < 0.65 or technical_signal == "HOLD":
         reason = f"Weak signal (strength={signal_strength:.2f}), call AI for clarification"
-        logger.info(f"  🤖 CALL AI: {reason}")
         return True, reason
     
     # AMBIGUOUS: Call AI
     if trend_status == "neutral" and 30 <= rsi_value <= 70:
         reason = f"Ambiguous market (neutral trend, RSI={rsi_value:.0f}), call AI"
-        logger.info(f"  🤖 CALL AI: {reason}")
         return True, reason
     
     # Default: Call AI (conservative)
-    logger.info(f"  🤖 CALL AI: Default (unclear conditions)")
     return True, "Default (unclear conditions)"
 
 

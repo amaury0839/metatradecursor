@@ -174,11 +174,14 @@ def main_trading_loop():
                     logger.info(f"⏭️  {symbol}: HOLD signal")
                     continue
                 
-                # Decide if should call AI
-                # Use fixed confidence for technical signals: 0.75 for BUY/SELL
+                # ============================================================
+                # SINGLE DECISION GATE: Determine AI involvement ONCE
+                # ============================================================
                 tech_confidence = 0.75 if signal in ["BUY", "SELL"] else 0.0
                 tech_data = analysis.get("technical", {}).get("data", {})
-                should_call_ai_value, ai_reason = should_call_ai(
+                
+                # Evaluate if signal is strong enough to skip AI
+                should_call_ai_value, ai_gate_reason = should_call_ai(
                     technical_signal=signal,
                     signal_strength=tech_confidence,
                     rsi_value=tech_data.get("rsi", 50.0),
@@ -186,31 +189,36 @@ def main_trading_loop():
                     ema_distance=abs(tech_data.get("ema_fast", 0) - tech_data.get("ema_slow", 0)) * 10000
                 )
                 
-                # Make decision
-                if not should_call_ai_value:
-                    logger.info(f"🚫 {symbol}: AI skipped ({ai_reason})")
-                    # Use technical signal only
+                # ============================================================
+                # EXECUTE: Exactly ONE of these paths (never both)
+                # ============================================================
+                if should_call_ai_value:
+                    # PATH A: Signal is weak/ambiguous → consult AI
+                    logger.info(f"🧠 {symbol} | GATE_DECISION: AI_CALLED (weak signal)")
+                    decision, _, _ = decision_engine.make_decision(
+                        symbol, timeframe, signal, analysis.get("technical", {}).get("data", {})
+                    )
+                    execution_confidence = tech_confidence  # Use technical confidence regardless
+                    
+                else:
+                    # PATH B: Signal is strong → skip AI entirely
+                    logger.info(f"⚡ {symbol} | GATE_DECISION: AI_SKIPPED ({ai_gate_reason})")
                     decision = TradingDecision(
                         action=signal,
                         confidence=tech_confidence,
                         symbol=symbol,
                         timeframe=timeframe,
-                        reason=[f"Technical: {ai_reason}"],
-                        reasoning=f"Using technical signal",
+                        reason=[f"Technical: {ai_gate_reason}"],
+                        reasoning=f"Strong technical signal, AI not needed",
                         risk_ok=True,
                         market_bias="bullish" if signal == "BUY" else "bearish",
                         sources=["technical"],
                     )
-                else:
-                    logger.info(f"✅ {symbol}: Calling AI")
-                    # Call AI (simplified)
-                    decision, _, _ = decision_engine.make_decision(
-                        symbol, timeframe, signal, analysis.get("technical", {}).get("data", {})
-                    )
+                    execution_confidence = tech_confidence
                 
-                # Check execution confidence - use tech_confidence always (from weighted calculation)
-                # For AI calls, decision.confidence is Gemini's raw score; we use tech_confidence instead
-                execution_confidence = tech_confidence  # Always use technical confidence
+                # ============================================================
+                # EXECUTION VALIDATION (same for both paths)
+                # ============================================================
                 if execution_confidence < MIN_EXECUTION_CONFIDENCE:
                     logger.info(f"⏭️  {symbol}: Confidence too low ({execution_confidence:.2f} < {MIN_EXECUTION_CONFIDENCE})")
                     log_skip_reason(symbol, "CONFIDENCE_TOO_LOW")
