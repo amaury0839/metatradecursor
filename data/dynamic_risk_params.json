@@ -173,7 +173,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:13.064043"
+    "last_adjusted": "2026-01-28T07:59:11.722355"
   },
   "USDZAR": {
     "symbol": "USDZAR",
@@ -195,7 +195,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:56:21.121001"
+    "last_adjusted": "2026-01-28T07:59:13.368635"
   },
   "CADCHF": {
     "symbol": "CADCHF",
@@ -261,7 +261,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:10.032944"
+    "last_adjusted": "2026-01-28T07:59:08.734634"
   },
   "EURPLN": {
     "symbol": "EURPLN",
@@ -283,7 +283,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:11.669293"
+    "last_adjusted": "2026-01-28T07:59:10.136869"
   },
   "EURSEK": {
     "symbol": "EURSEK",
@@ -305,7 +305,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:12.426924"
+    "last_adjusted": "2026-01-28T07:59:10.975007"
   },
   "USDTRY": {
     "symbol": "USDTRY",
@@ -327,7 +327,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:56:18.573855"
+    "last_adjusted": "2026-01-28T07:59:12.556516"
   },
   "AUDJPY": {
     "symbol": "AUDJPY",
@@ -371,7 +371,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:07.777051"
+    "last_adjusted": "2026-01-28T07:59:05.575584"
   },
   "AUDSGD": {
     "symbol": "AUDSGD",
@@ -437,7 +437,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:10.717587"
+    "last_adjusted": "2026-01-28T07:59:09.385743"
   },
   "GBPAUD": {
     "symbol": "GBPAUD",
@@ -525,7 +525,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:57:06.762389"
+    "last_adjusted": "2026-01-28T07:59:04.509386"
   },
   "GBPJPY": {
     "symbol": "GBPJPY",
@@ -569,7 +569,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:43:07.955081"
+    "last_adjusted": "2026-01-28T07:58:23.750956"
   },
   "NZDJPY": {
     "symbol": "NZDJPY",
@@ -701,7 +701,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:54:11.512346"
+    "last_adjusted": "2026-01-28T07:58:24.599636"
   },
   "AUDNZD": {
     "symbol": "AUDNZD",
@@ -723,7 +723,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:46:07.074724"
+    "last_adjusted": "2026-01-28T07:58:16.709355"
   },
   "CHFSGD": {
     "symbol": "CHFSGD",
