@@ -173,7 +173,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:47:19.517104"
+    "last_adjusted": "2026-01-28T07:52:14.198590"
   },
   "USDZAR": {
     "symbol": "USDZAR",
@@ -195,7 +195,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:47:21.507104"
+    "last_adjusted": "2026-01-28T07:52:15.882499"
   },
   "CADCHF": {
     "symbol": "CADCHF",
@@ -261,7 +261,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:47:15.487217"
+    "last_adjusted": "2026-01-28T07:52:10.488507"
   },
   "EURPLN": {
     "symbol": "EURPLN",
@@ -283,7 +283,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:47:16.367433"
+    "last_adjusted": "2026-01-28T07:52:11.483779"
   },
   "EURSEK": {
     "symbol": "EURSEK",
@@ -305,7 +305,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:47:16.988550"
+    "last_adjusted": "2026-01-28T07:52:13.411392"
   },
   "USDTRY": {
     "symbol": "USDTRY",
@@ -327,7 +327,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:47:20.401793"
+    "last_adjusted": "2026-01-28T07:52:14.998267"
   },
   "AUDJPY": {
     "symbol": "AUDJPY",
@@ -371,7 +371,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:17:18.782222"
+    "last_adjusted": "2026-01-28T07:52:09.630325"
   },
   "AUDSGD": {
     "symbol": "AUDSGD",
@@ -437,7 +437,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T06:52:21.652854"
+    "last_adjusted": "2026-01-28T07:49:08.074650"
   },
   "GBPAUD": {
     "symbol": "GBPAUD",
@@ -459,7 +459,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:42:06.260975"
+    "last_adjusted": "2026-01-28T07:49:10.967612"
   },
   "USDCAD": {
     "symbol": "USDCAD",
@@ -525,7 +525,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:48:05.919107"
+    "last_adjusted": "2026-01-28T07:52:08.596578"
   },
   "GBPJPY": {
     "symbol": "GBPJPY",
@@ -789,7 +789,7 @@
       "avg_loss": 0.0,
       "sharpe_ratio": 0.0
     },
-    "last_adjusted": "2026-01-28T07:17:17.351468"
+    "last_adjusted": "2026-01-28T07:48:06.885446"
   },
   "AUDCAD": {
     "symbol": "AUDCAD",
