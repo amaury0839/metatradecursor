@@ -175,7 +175,8 @@ def main_trading_loop():
                     continue
                 
                 # Decide if should call AI
-                tech_confidence = analysis.get("technical", {}).get("confidence", 0.0)
+                # Use fixed confidence for technical signals: 0.75 for BUY/SELL
+                tech_confidence = 0.75 if signal in ["BUY", "SELL"] else 0.0
                 tech_data = analysis.get("technical", {}).get("data", {})
                 should_call_ai_value, ai_reason = should_call_ai(
                     technical_signal=signal,
