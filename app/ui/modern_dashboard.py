@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Dict, Any
+import sqlite3
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -335,37 +336,71 @@ def render_dashboard_tab() -> None:
 
 
 def render_positions_tab() -> None:
-    """Open positions view."""
+    """Open positions view - reads from database."""
     section_header("Open positions")
-    mt5_status = get_mt5_status()
-    if not mt5_status.get("connected"):
-        st.error("MT5 is offline. Connect to view positions.")
-        return
-
+    
     try:
-        mt5_client = get_mt5_client()
-        positions = mt5_client.get_open_positions()
-        if not positions:
-            st.success("No open positions.")
+        db = _get_db()
+        
+        # Get open positions from database
+        # For now, we'll show a placeholder since we're reading from shared state
+        from app.core.shared_state import get_shared_state_manager
+        shared_state = get_shared_state_manager()
+        state_data = shared_state.get_state()
+        
+        if not state_data or 'trading' not in state_data:
+            st.info("No position data available yet. Bot is initializing...")
             return
-
-        position_data = []
-        for pos in positions:
-            position_data.append(
-                {
-                    "Symbol": pos.symbol,
-                    "Side": "BUY" if pos.type == 0 else "SELL",
-                    "Lots": pos.volume,
-                    "Entry": pos.price_open,
-                    "Current": pos.price_current,
-                    "PnL": pos.profit,
-                }
-            )
-
-        df = pd.DataFrame(position_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        trading_data = state_data.get('trading', {})
+        open_positions = trading_data.get('open_positions', 0)
+        total_exposure = trading_data.get('total_exposure', 0.0)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Open Positions", open_positions)
+        with col2:
+            st.metric("Total Exposure", f"{total_exposure:.2f}%")
+        with col3:
+            st.metric("Status", "Active" if open_positions > 0 else "No Positions")
+        
+        # Try to get recent trades from database
+        try:
+            conn = sqlite3.connect('data/trading_history.db')
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT symbol, type, volume, open_price, open_timestamp, close_price, profit
+                FROM trades
+                WHERE close_timestamp IS NULL
+                ORDER BY open_timestamp DESC
+                LIMIT 20
+            """)
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            if rows:
+                position_data = []
+                for row in rows:
+                    position_data.append({
+                        "Symbol": row[0],
+                        "Side": "BUY" if row[1] == 0 else "SELL",
+                        "Volume": row[2],
+                        "Entry": f"{row[3]:.5f}",
+                        "Current": f"{row[5]:.5f}" if row[5] else "N/A",
+                        "PnL": f"${row[6]:.2f}" if row[6] else "N/A",
+                    })
+                
+                df = pd.DataFrame(position_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No open positions in database.")
+        except Exception as e:
+            st.warning(f"Could not load position details from database: {e}")
+            
     except Exception as exc:
-        st.error(f"Error fetching positions: {exc}")
+        st.error(f"Error loading positions: {exc}")
 
 
 def render_analysis_tab() -> None:
