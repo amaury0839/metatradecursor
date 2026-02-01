@@ -24,7 +24,7 @@ from app.core.logger import setup_logger
 from app.core.scheduler import TradingScheduler
 from app.core.database import get_database_manager
 from app.trading.mt5_client import get_mt5_client
-from app.main import main_trading_loop
+from app.trading.trading_loop import main_trading_loop
 
 logger = setup_logger("bot_runner")
 

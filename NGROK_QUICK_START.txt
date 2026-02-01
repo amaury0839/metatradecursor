@@ -1,0 +1,163 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║                   🚀 A-BOT NGROK CONFIGURACIÓN RÁPIDA 🚀                     ║
+║                                                                               ║
+║              Expone A-Bot API y Dashboard al Internet de forma segura         ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+
+📋 OPCIÓN 1: INICIO RÁPIDO (RECOMENDADO)
+═════════════════════════════════════════════════════════════════════════════════
+
+Abre PowerShell y ejecuta:
+
+    powershell -ExecutionPolicy Bypass -File RUN_NGROK_NOW.ps1
+
+Eso es todo. El script hará:
+  ✅ Descargar e instalar Ngrok
+  ✅ Solicitarte tu token de Ngrok (obtén uno gratis en https://dashboard.ngrok.com)
+  ✅ Verificar que A-Bot esté ejecutándose
+  ✅ Iniciar los túneles Ngrok
+
+
+📋 OPCIÓN 2: INSTALACIÓN MANUAL
+═════════════════════════════════════════════════════════════════════════════════
+
+PASO 1: Obtén tu token de Ngrok
+────────────────────────────────
+  1. Ve a: https://dashboard.ngrok.com/auth/your-authtoken
+  2. Crea una cuenta gratis (o inicia sesión)
+  3. Copia el token que aparece en la pantalla
+
+PASO 2: Descarga Ngrok
+────────────────────────────────
+  1. Descarga desde: https://ngrok.com/download
+  2. Extrae el archivo en una carpeta
+  3. Agrega la carpeta a Variables de Entorno (PATH)
+
+PASO 3: Configura tu token
+────────────────────────────────
+  ngrok config add-authtoken TU_TOKEN_AQUI
+
+PASO 4: Asegúrate que A-Bot esté ejecutándose
+────────────────────────────────
+  En Terminal 1:
+    python -m uvicorn app.api.server:app --host 0.0.0.0 --port 8002
+
+  En Terminal 2:
+    streamlit run app/main_ui.py --server.port 8504
+
+PASO 5: Inicia Ngrok
+────────────────────────────────
+  En Terminal 3:
+    ngrok start --all
+
+  O para iniciar solo API:
+    ngrok http 8002
+
+  O para iniciar solo Dashboard:
+    ngrok http 8504
+
+
+═════════════════════════════════════════════════════════════════════════════════
+🌐 QIÉN VER LAS URLS PÚBLICAS
+═════════════════════════════════════════════════════════════════════════════════
+
+Una vez que Ngrok esté ejecutándose, verás algo como:
+
+    Forwarding    https://abc123def456.ngrok.io -> http://localhost:8002
+    Forwarding    https://xyz789uvw456.ngrok.io -> http://localhost:8504
+
+Estas son tus URLs públicas:
+  📊 A-Bot API:       https://abc123def456.ngrok.io
+  📱 A-Bot Dashboard: https://xyz789uvw456.ngrok.io
+
+Puedes acceder desde cualquier lugar del mundo!
+
+
+═════════════════════════════════════════════════════════════════════════════════
+📊 PANEL DE INSPECCIÓN NGROK
+═════════════════════════════════════════════════════════════════════════════════
+
+Mientras Ngrok esté ejecutándose, puedes ver:
+  🔗 http://localhost:4040
+
+Aquí verás:
+  ✓ Todos los requests en tiempo real
+  ✓ Headers y bodies de las solicitudes
+  ✓ Estadísticas de conexión
+  ✓ Logs de actividad
+
+
+═════════════════════════════════════════════════════════════════════════════════
+⚙️ INFORMACIÓN TÉCNICA
+═════════════════════════════════════════════════════════════════════════════════
+
+A-Bot Ports:
+  🔌 API Server:     puerto 8002 (uvicorn)
+  🔌 Dashboard UI:   puerto 8504 (streamlit)
+
+Ngrok Config Location:
+  📁 C:\Users\Shadow\.ngrok2\ngrok.yml
+
+Ngrok Documentation:
+  📖 https://ngrok.com/docs
+
+
+═════════════════════════════════════════════════════════════════════════════════
+⚠️ IMPORTANTE - SEGURIDAD
+═════════════════════════════════════════════════════════════════════════════════
+
+✅ Recomendaciones:
+  • Las URLs de Ngrok cambian cada vez que reinicia (sin plan pago)
+  • Usa HTTPS (Ngrok lo hace automáticamente)
+  • No compartas URLs en foros públicos
+  • Considera agregar autenticación básica:
+    ngrok http 8504 --basic-auth "usuario:contraseña"
+
+✅ Mejores Prácticas:
+  • Monitorea el panel de inspección regularmente
+  • Regenera tokens cada cierto tiempo
+  • Limpia sesiones viejas en dashboard.ngrok.com
+
+
+═════════════════════════════════════════════════════════════════════════════════
+❓ TROUBLESHOOTING
+═════════════════════════════════════════════════════════════════════════════════
+
+Error: "Command not found: ngrok"
+  ✓ Solución: Reinicia PowerShell o agrega C:\Program Files\ngrok al PATH
+
+Error: "Failed to authenticate"
+  ✓ Solución: Verifica tu token: ngrok config check
+  ✓ Reapply: ngrok config add-authtoken TU_TOKEN
+
+Error: "Cannot connect to localhost:8002"
+  ✓ Solución: Verifica que A-Bot API esté ejecutándose
+  ✓ Verifica el puerto: netstat -ano | findstr :8002
+
+Las URLs de Ngrok cambian frecuentemente
+  ✓ Es normal sin plan pago (URLs estáticas requieren plan)
+  ✓ Las nuevas URLs se muestran cada vez que inicias Ngrok
+
+
+═════════════════════════════════════════════════════════════════════════════════
+🎯 PRÓXIMOS PASOS
+═════════════════════════════════════════════════════════════════════════════════
+
+1. ✅ Ejecuta: powershell -ExecutionPolicy Bypass -File RUN_NGROK_NOW.ps1
+2. ✅ Obtén tu token de https://dashboard.ngrok.com
+3. ✅ Ingresa el token cuando se solicite
+4. ✅ Abre las URLs públicas en tu navegador
+5. ✅ ¡Tu A-Bot está ahora expuesto al internet!
+
+
+═════════════════════════════════════════════════════════════════════════════════
+
+¿Preguntas? Consulta la documentación oficial:
+  🌐 https://ngrok.com/docs
+
+¡Disfruta tu A-Bot expuesto públicamente! 🚀
+
+═════════════════════════════════════════════════════════════════════════════════

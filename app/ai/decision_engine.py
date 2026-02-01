@@ -326,6 +326,7 @@ class DecisionEngine:
                 entry_price=current_price,
                 stop_loss_price=sl_price,
                 risk_amount=risk_amount,
+                confidence=confidence,
             )
             if volume > 0:
                 volume = self.risk.cap_volume_by_risk(

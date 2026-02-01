@@ -150,6 +150,39 @@ class ExecutionManager:
         logger.info(f"🔴 place_market_order ENTRY: symbol={symbol} type={order_type} volume={volume} paper_mode={self.config.is_paper_mode()}")
         
         try:
+            # ✅ 1️⃣ VALIDAR FREE MARGIN (CRÍTICO)
+            account = self.mt5.get_account_info()
+            if account:
+                free_margin = account.get('margin_free', 0)
+                balance = account.get('balance', 0)
+                used_margin = account.get('margin', 0)
+                
+                # Definir pares exóticos que consumen mucho margen
+                EXOTICS = ['USDTRY', 'USDHKD', 'EURPLN', 'EURNOK', 'USDKZT', 'USDRUB', 'USDCNY']
+                is_exotic = any(symbol.upper().startswith(e) or symbol.upper().endswith(e) for e in EXOTICS)
+                
+                # Requisito mínimo: 1.3x del margen necesario
+                min_free_margin_multiplier = 1.3
+                required_margin = volume * 1000  # Estimación conservadora
+                required_free_margin = required_margin * min_free_margin_multiplier
+                
+                # Si es exótico, ser más conservador
+                if is_exotic:
+                    required_free_margin *= 1.5
+                
+                if free_margin < required_free_margin:
+                    msg = (f"❌ NOT ENOUGH FREE MARGIN for {symbol}: "
+                           f"free=${free_margin:.0f}, need ${required_free_margin:.0f}, "
+                           f"balance=${balance:.0f}, used=${used_margin:.0f}")
+                    logger.warning(msg)
+                    return False, None, msg
+                
+                # Si es exótico y margen libre < 2000, no operar
+                if is_exotic and free_margin < 2000:
+                    msg = f"❌ {symbol} is EXOTIC and free_margin=${free_margin:.0f} < $2000. Skipping."
+                    logger.warning(msg)
+                    return False, None, msg
+            
             symbol_info = self.mt5.get_symbol_info(symbol)
             if symbol_info:
                 info_dict = symbol_info._asdict() if hasattr(symbol_info, '_asdict') else symbol_info
@@ -198,7 +231,7 @@ class ExecutionManager:
             if not symbol_info:
                 return False, None, f"Cannot get symbol info for {symbol}"
             
-            if not self.market_status.is_forex_market_open(symbol):
+            if not self.market_status.is_symbol_open(symbol):
                 status_text = self.market_status.get_market_status_text(symbol)
                 logger.warning(f"Cannot trade {symbol}: {status_text}")
                 return False, None, f"{status_text} - Order rejected"
@@ -301,8 +334,27 @@ class ExecutionManager:
                 broker_max = float(symbol_info_dict.get('volume_max', 0.0) or 0.0)
                 broker_step = float(symbol_info_dict.get('volume_step', 0.0) or 0.0)
 
+                # 🔥 IMPROVED LOGGING: Show volume analysis
+                account_info = self.mt5.get_account_info()
+                max_allowed_risk = account_info.get('balance', 0) * (self.risk.risk_per_trade_pct / 100) if account_info else 0
+                
+                # Calculate implied risk if we use broker minimum
+                if broker_min > 0 and sl_price:
+                    risk_per_lot_at_min = abs(price - sl_price) * broker_min
+                    if is_crypto:
+                        # For crypto CFDs, multiply by contract size
+                        risk_per_lot_at_min *= 100  # Approximate scaling
+                else:
+                    risk_per_lot_at_min = 0
+                
                 if bot_cap and broker_min > bot_cap:
-                    logger.info(f"{symbol}: broker min volume {broker_min} exceeds bot cap {bot_cap}; using broker min")
+                    logger.info(f"🔴 {symbol} VOLUME CONSTRAINT ANALYSIS:")
+                    logger.info(f"   Calculated volume: {orig_volume:.5f} lots")
+                    logger.info(f"   Broker minimum:    {broker_min:.5f} lots")
+                    logger.info(f"   Bot cap:           {bot_cap:.5f} lots")
+                    logger.info(f"   Implied risk @min: ${risk_per_lot_at_min:,.2f}")
+                    logger.info(f"   Max allowed risk:  ${max_allowed_risk:,.2f}")
+                    logger.info(f"   ⚠️  Using broker minimum {broker_min} (exceeds bot cap {bot_cap})")
 
                 # Apply risk normalization and caps, then enforce broker rules
                 if bot_cap:
@@ -320,8 +372,54 @@ class ExecutionManager:
                     if broker_max > 0 and final_volume > broker_max:
                         final_volume = broker_max
 
+                # 🔥 PRAGMATIC LOGIC: If volume < broker_min, check if we can use broker_min without exceeding risk
+                if final_volume < broker_min and broker_min > 0 and sl_price:
+                    price_risk = abs(price - sl_price)
+                    implied_risk_at_min = price_risk * broker_min
+                    
+                    # For crypto CFDs, scale appropriately
+                    if is_crypto:
+                        implied_risk_at_min *= 100
+                    
+                    # Get risk limits
+                    max_risk_threshold = max_allowed_risk * 1.5  # Allow up to 150% of standard risk
+                    
+                    logger.warning(f"🔥 {symbol} PRAGMATIC VOLUME ADJUSTMENT:")
+                    logger.warning(f"   calculated_volume: {final_volume:.5f} lots")
+                    logger.warning(f"   broker_min_volume: {broker_min:.5f} lots")
+                    logger.warning(f"   implied_risk_if_min: ${implied_risk_at_min:,.2f}")
+                    logger.warning(f"   max_allowed_risk: ${max_allowed_risk:,.2f}")
+                    logger.warning(f"   max_risk_threshold (150%): ${max_risk_threshold:,.2f}")
+                    
+                    if implied_risk_at_min <= max_risk_threshold:
+                        logger.warning(f"   ✅ APPROVED: Using broker_min {broker_min} (risk acceptable)")
+                        final_volume = broker_min
+                    else:
+                        logger.warning(f"   ❌ REJECTED: Implied risk ${implied_risk_at_min:,.2f} > threshold ${max_risk_threshold:,.2f}")
+                        return False, None, f"{symbol}: implied risk too high at broker minimum"
+
                 # Final sanity: respect hard bounds
                 if final_volume < broker_min:
+                    # 🔴 DETAILED SKIP REASON - VOLUME ANALYSIS
+                    account_info = self.mt5.get_account_info()
+                    balance = account_info.get('balance', 0) if account_info else 0
+                    max_allowed_risk = balance * (self.risk.risk_per_trade_pct / 100)
+                    
+                    # Calculate implied risk if we use broker minimum
+                    if broker_min > 0 and sl_price:
+                        price_risk = abs(price - sl_price)
+                        implied_risk_at_min = price_risk * broker_min
+                        if is_crypto:
+                            implied_risk_at_min *= 100  # Approximate scaling for crypto CFDs
+                    else:
+                        implied_risk_at_min = 0
+                    
+                    logger.warning(f"🔴 {symbol} VOLUME SKIP ANALYSIS:")
+                    logger.warning(f"   calculated_volume: {final_volume:.5f} lots")
+                    logger.warning(f"   broker_min_volume: {broker_min:.5f} lots")
+                    logger.warning(f"   implied_risk_if_min: ${implied_risk_at_min:,.2f}")
+                    logger.warning(f"   max_allowed_risk: ${max_allowed_risk:,.2f}")
+                    logger.warning(f"   ❌ SKIP: volume {final_volume:.5f} < {broker_min:.5f}")
                     return False, None, f"{symbol}: volume {final_volume} < broker min {broker_min}, skipping"
                 if broker_max > 0 and final_volume > broker_max:
                     final_volume = broker_max
@@ -573,6 +671,57 @@ class ExecutionManager:
         except Exception as e:
             logger.error(f"Error closing position: {e}", exc_info=True)
             return False, str(e)
+    
+    def close_position_partial(self, ticket: int, volume: float, comment: str = "Partial close") -> bool:
+        """
+        Cierre parcial de posición
+        
+        Respeta volúmenes mínimos del broker (redondea a múltiplos válidos)
+        
+        Args:
+            ticket: Position ticket
+            volume: Volume to close (debe ser < volumen total)
+            comment: Comment for the close order
+        
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # Get position para validar volumen
+            if not MT5_AVAILABLE:
+                logger.info(f"[PAPER/DEMO] Would partial close: ticket={ticket}, volume={volume}")
+                return True
+            
+            positions = mt5.positions_get(ticket=ticket)
+            if not positions:
+                logger.error(f"Position {ticket} not found")
+                return False
+            
+            position = positions[0]
+            symbol = position.symbol
+            total_volume = position.volume
+            
+            # Obtener info del símbolo para volumen mínimo
+            sym_info = mt5.symbol_info(symbol)
+            if sym_info:
+                min_volume = getattr(sym_info, 'volume_min', 0.01)
+                # Redondear volume a múltiplo de min_volume
+                volume = max(min_volume, round(volume / min_volume) * min_volume)
+                volume = min(volume, total_volume * 0.95)  # No cerrar más del 95%
+                
+                logger.info(f"Closing {symbol}: {volume:.2f} of {total_volume:.2f} lots (min={min_volume})")
+            
+            # Usar close_position con volumen ajustado
+            success, error = self.close_position(ticket, volume=volume)
+            if success:
+                logger.info(f"✅ Partial close successful: ticket={ticket}, volume={volume}")
+            else:
+                logger.error(f"❌ Partial close failed: ticket={ticket}, error={error}")
+            return success
+        
+        except Exception as e:
+            logger.error(f"Error in partial close: {e}")
+            return False
     
     def modify_position(
         self,

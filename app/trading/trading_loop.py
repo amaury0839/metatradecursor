@@ -108,7 +108,9 @@ def main_trading_loop():
             account_balance = 0
             equity_display = 0
         
-        # Get symbols to trade
+        # Get symbols to trade - Use default symbols which includes all 9 available crypto pairs 🔧
+        # default_symbols: 7 major forex + 32 cross forex + 9 crypto (BTCUSD, ETHUSD, BNBUSD, SOLUSD, XRPUSD, ADAUSD, DOTUSD, LTCUSD, UNIUSD)
+        # We don't use additional crypto_symbols because some (LUNAUSD, MATICUSD, etc.) aren't available in the MT5 demo account
         symbols = config.trading.default_symbols
         timeframe = config.trading.default_timeframe
         
@@ -122,6 +124,10 @@ def main_trading_loop():
         open_positions = portfolio.get_open_positions()
         logger.info(f"Found {len(open_positions)} open positions")
         
+        # Tracker para max profit por ticket
+        if not hasattr(state, 'max_profit_tracker'):
+            state.max_profit_tracker = {}
+        
         for position in open_positions:
             try:
                 pos_symbol = position.get('symbol', '')
@@ -129,19 +135,78 @@ def main_trading_loop():
                 pos_type = 'BUY' if position.get('type', 0) == 0 else 'SELL'
                 pos_profit = position.get('profit', 0.0)
                 pos_volume = position.get('volume', 0.0)
+                pos_entry = position.get('price_open', 0)
+                pos_sl = position.get('sl', 0)
+                pos_tp = position.get('tp', 0)
                 
-                logger.info(f"Position: {pos_symbol} {pos_type} {pos_volume} lots, P&L=${pos_profit:.2f}")
+                logger.info(f"Position: {pos_symbol} {pos_type} {pos_volume} lots, P&L=${pos_profit:.2f}, entry={pos_entry:.5f}, SL={pos_sl:.5f}, TP={pos_tp:.5f}")
+                
+                # ⚠️ Verificar que tenga SL y TP
+                if pos_sl == 0 or pos_tp == 0:
+                    logger.warning(f"⚠️ {pos_symbol} ticket {pos_ticket}: Missing SL or TP! (SL={pos_sl}, TP={pos_tp})")
                 
                 # Get analysis for position symbol
                 pos_analysis = integrated_analyzer.analyze_symbol(pos_symbol, timeframe)
                 current_signal = pos_analysis["signal"]
+                signal_confidence = 0.7  # Default confidence, should be calculated from analysis
                 
-                # TODO: Implement position management logic
-                # - Pyramiding check
-                # - Scalping rules (scale-out, trailing stop, hard close)
-                # - Exit management (opposite signal, RSI, TTL, EMA, time limit)
+                # 🔍 REVISIÓN COMPLETA DE POSICIÓN (TODAS LAS REGLAS)
+                review_result = position_manager.review_position_full(
+                    position=position,
+                    current_signal=current_signal,
+                    signal_confidence=signal_confidence,
+                    analysis=pos_analysis,
+                    max_profit_tracker=state.max_profit_tracker
+                )
                 
-                logger.info(f"  Current signal: {current_signal}, continuing to hold")
+                # 🎯 EJECUTAR ACCIONES SEGÚN RESULTADO
+                if review_result['should_close']:
+                    close_percent = review_result.get('close_percent', None)
+                    reason = review_result.get('reason', 'Unknown')
+                    
+                    if close_percent is None:  # CIERRE TOTAL
+                        logger.info(f"🔴 CLOSING {pos_symbol} ticket {pos_ticket}: {reason}")
+                        try:
+                            success, error = execution.close_position(pos_ticket)
+                            if success:
+                                logger.info(f"✅ {pos_symbol} closed successfully")
+                                # Limpiar del tracker
+                                if pos_ticket in state.max_profit_tracker:
+                                    del state.max_profit_tracker[pos_ticket]
+                            else:
+                                logger.error(f"❌ Failed to close {pos_symbol}: {error}")
+                        except Exception as e:
+                            logger.error(f"Error closing {pos_symbol}: {e}")
+                    
+                    else:  # CIERRE PARCIAL
+                        close_volume = pos_volume * close_percent
+                        logger.info(f"🟡 PARTIAL CLOSE {pos_symbol} ticket {pos_ticket}: {close_percent*100:.0f}% ({close_volume} lots) - {reason}")
+                        try:
+                            # Para cierre parcial, necesitamos cerrar el % especificado
+                            success = execution.close_position_partial(pos_ticket, close_volume, comment=f"Partial: {reason[:30]}")
+                            if success:
+                                logger.info(f"✅ {pos_symbol} partial close successful")
+                            else:
+                                logger.error(f"❌ Failed partial close {pos_symbol}")
+                        except Exception as e:
+                            logger.error(f"Error partial closing {pos_symbol}: {e}")
+                
+                # 📈 ACTUALIZAR TRAILING STOP
+                elif review_result.get('update_sl') is not None:
+                    new_sl = review_result['update_sl']
+                    logger.info(f"📈 Updating trailing SL for {pos_symbol} ticket {pos_ticket}: {pos_sl:.5f} → {new_sl:.5f}")
+                    try:
+                        # Modificar SL de la posición
+                        success, error = execution.modify_position(pos_ticket, sl_price=new_sl, tp_price=pos_tp)
+                        if success:
+                            logger.info(f"✅ Trailing SL updated for {pos_symbol}")
+                        else:
+                            logger.error(f"❌ Failed to update SL for {pos_symbol}: {error}")
+                    except Exception as e:
+                        logger.error(f"Error updating SL for {pos_symbol}: {e}")
+                
+                else:
+                    logger.info(f"  Current signal: {current_signal}, holding position")
                 
             except Exception as e:
                 logger.error(f"Error reviewing {pos_symbol}: {e}")
@@ -151,107 +216,192 @@ def main_trading_loop():
         logger.info("STEP 2: EVALUATING NEW TRADE OPPORTUNITIES")
         logger.info("=" * 60)
         
-        new_trades_count = 0
-        
-        for symbol in symbols:
-            try:
-                # Skip if already have position
-                if portfolio.has_position(symbol):
-                    logger.info(f"⏭️  {symbol}: Already have open position")
-                    continue
-                
-                # Check position limits
-                can_trade, trade_error = risk.can_open_new_trade(symbol)
-                if not can_trade:
-                    logger.info(f"⏭️  {symbol}: {trade_error}")
-                    continue
-                
-                # ============================================================
-                # GATE DECISION #1: Determine AI involvement BEFORE analysis
-                # This gate controls whether AI is consulted during analyze_symbol()
-                # ============================================================
-                # First, get technical data WITHOUT AI
-                preliminary_analysis = integrated_analyzer.analyze_symbol(symbol, timeframe, skip_ai=True)
-                signal = preliminary_analysis["signal"]
-                
-                if signal == "HOLD":
-                    logger.info(f"⏭️  {symbol}: HOLD signal")
-                    continue
-                
-                tech_data = preliminary_analysis.get("technical", {}).get("data", {})
-                tech_confidence = 0.75 if signal in ["BUY", "SELL"] else 0.0
-                rsi_value = tech_data.get("rsi", 50.0)
-                
-                # Check RSI_OVERBOUGHT BLOCK (before AI gate)
-                if signal == "BUY" and rsi_value >= RSI_OVERBOUGHT:
-                    logger.info(f"⏭️  {symbol}: RSI_BLOCK (RSI={rsi_value:.0f} >= {RSI_OVERBOUGHT} for BUY)")
-                    log_skip_reason(symbol, "RSI_BLOCK_BUY_OVERBOUGHT")
-                    continue
-                
-                # Evaluate if signal is strong enough to skip AI
-                should_call_ai_value, ai_gate_reason = should_call_ai(
-                    technical_signal=signal,
-                    signal_strength=tech_confidence,
-                    rsi_value=rsi_value,
-                    trend_status="bullish" if signal == "BUY" else ("bearish" if signal == "SELL" else "neutral"),
-                    ema_distance=abs(tech_data.get("ema_fast", 0) - tech_data.get("ema_slow", 0)) * 10000
-                )
-                
-                # ============================================================
-                # EXECUTE: Exactly ONE of these paths (never both)
-                # ============================================================
-                if should_call_ai_value:
-                    # PATH A: Signal is weak/ambiguous → consult AI
-                    logger.info(f"🧠 {symbol} | GATE_DECISION: AI_CALLED (weak signal - {ai_gate_reason})")
-                    # Re-analyze WITH AI enabled
-                    analysis = integrated_analyzer.analyze_symbol(symbol, timeframe, skip_ai=False)
+        # ✅ LÍMITE MÁXIMO DE TRADES SIMULTÁNEOS
+        MAX_OPEN_TRADES = 12  # Para scalping: 8-12, para swing: 5-8
+        if len(open_positions) >= MAX_OPEN_TRADES:
+            logger.warning(f"⚠️  MAX TRADES REACHED: {len(open_positions)} >= {MAX_OPEN_TRADES}. Skipping new entries.")
+            new_trades_count = 0
+        else:
+            new_trades_count = 0
+            
+            for symbol in symbols:
+                try:
+                    # Skip if already have position
+                    if portfolio.has_position(symbol):
+                        logger.info(f"⏭️  {symbol}: Already have open position")
+                        continue
                     
-                    decision, _, _ = decision_engine.make_decision(
-                        symbol, timeframe, signal, analysis.get("technical", {}).get("data", {})
+                    # ✅ Verificar si aún hay espacio
+                    if len(open_positions) + new_trades_count >= MAX_OPEN_TRADES:
+                        logger.info(f"⏭️  {symbol}: Max trades reached ({MAX_OPEN_TRADES})")
+                        break
+                    
+                    # Check position limits
+                    can_trade, trade_error = risk.can_open_new_trade(symbol)
+                    if not can_trade:
+                        logger.info(f"⏭️  {symbol}: {trade_error}")
+                        continue
+                    
+                    # ============================================================
+                    # GATE DECISION #1: Determine AI involvement BEFORE analysis
+                    # This gate controls whether AI is consulted during analyze_symbol()
+                    # ============================================================
+                    # First, get technical data WITHOUT AI
+                    preliminary_analysis = integrated_analyzer.analyze_symbol(symbol, timeframe, skip_ai=True)
+                    signal = preliminary_analysis["signal"]
+                    
+                    # 🔧 FIX: Don't skip HOLD early - let AI gate make the decision
+                    # Previously was skipping all HOLD signals, preventing crypto trading
+                    # Now we let the AI gate evaluate if it should be retried with AI enabled
+                    # if signal == "HOLD":
+                    #     logger.info(f"⏭️  {symbol}: HOLD signal")
+                    #     continue
+                    
+                    tech_data = preliminary_analysis.get("technical", {}).get("data", {})
+                    tech_confidence = 0.75 if signal in ["BUY", "SELL"] else 0.0
+                    rsi_value = tech_data.get("rsi", 50.0)
+                    
+                    # Check RSI_OVERBOUGHT BLOCK (before AI gate)
+                    if signal == "BUY" and rsi_value >= RSI_OVERBOUGHT:
+                        logger.info(f"⏭️  {symbol}: RSI_BLOCK (RSI={rsi_value:.0f} >= {RSI_OVERBOUGHT} for BUY)")
+                        log_skip_reason(symbol, "RSI_BLOCK_BUY_OVERBOUGHT")
+                        continue
+                    
+                    # Evaluate if signal is strong enough to skip AI
+                    should_call_ai_value, ai_gate_reason = should_call_ai(
+                        technical_signal=signal,
+                        signal_strength=tech_confidence,
+                        rsi_value=rsi_value,
+                        trend_status="bullish" if signal == "BUY" else ("bearish" if signal == "SELL" else "neutral"),
+                        ema_distance=abs(tech_data.get("ema_fast", 0) - tech_data.get("ema_slow", 0)) * 10000
                     )
-                    execution_confidence = tech_confidence  # Use technical confidence regardless
                     
-                else:
-                    # PATH B: Signal is strong → skip AI entirely
-                    logger.info(f"⚡ {symbol} | GATE_DECISION: AI_SKIPPED ({ai_gate_reason})")
-                    # Use analysis without AI
-                    analysis = preliminary_analysis
-                    decision = TradingDecision(
-                        action=signal,
-                        confidence=tech_confidence,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        reason=[f"Technical: {ai_gate_reason}"],
-                        reasoning=f"Strong technical signal, AI not needed",
-                        risk_ok=True,
-                        market_bias="bullish" if signal == "BUY" else "bearish",
-                        sources=["technical"],
-                    )
-                    execution_confidence = tech_confidence
-                
-                # ============================================================
-                # EXECUTION VALIDATION (same for both paths)
-                # ============================================================
-                if execution_confidence < MIN_EXECUTION_CONFIDENCE:
-                    logger.info(f"⏭️  {symbol}: Confidence too low ({execution_confidence:.2f} < {MIN_EXECUTION_CONFIDENCE})")
-                    log_skip_reason(symbol, "CONFIDENCE_TOO_LOW")
-                    continue
-                
-                # Check if valid for execution
-                if decision.action != "HOLD" and decision.is_valid_for_execution():
-                    logger.info(f"✅ {symbol}: {decision.action} signal, confidence={execution_confidence:.2f}")
-                    new_trades_count += 1
+                    # ============================================================
+                    # EXECUTE: Exactly ONE of these paths (never both)
+                    # ============================================================
+                    if should_call_ai_value:
+                        # PATH A: Signal is weak/ambiguous → consult AI
+                        logger.info(f"🧠 {symbol} | GATE_DECISION: AI_CALLED (weak signal - {ai_gate_reason})")
+                        # Re-analyze WITH AI enabled
+                        analysis = integrated_analyzer.analyze_symbol(symbol, timeframe, skip_ai=False)
+                        
+                        decision, _, _ = decision_engine.make_decision(
+                            symbol, timeframe, signal, analysis.get("technical", {}).get("data", {})
+                        )
+                        execution_confidence = tech_confidence  # Use technical confidence regardless
+                        
+                    else:
+                        # PATH B: Signal is strong → skip AI entirely
+                        logger.info(f"⚡ {symbol} | GATE_DECISION: AI_SKIPPED ({ai_gate_reason})")
+                        # Use analysis without AI
+                        analysis = preliminary_analysis
+                        decision = TradingDecision(
+                            action=signal,
+                            confidence=tech_confidence,
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            reason=[f"Technical: {ai_gate_reason}"],
+                            reasoning=f"Strong technical signal, AI not needed",
+                            risk_ok=True,
+                            market_bias="bullish" if signal == "BUY" else "bearish",
+                            sources=["technical"],
+                        )
+                        execution_confidence = tech_confidence
                     
-                    # TODO: Implement trade execution
-                    # - Run validation gates
-                    # - Calculate sizing
-                    # - Place order
-                    # - Log execution
-                else:
-                    logger.info(f"⏭️  {symbol}: Decision not valid for execution")
+                    # ============================================================
+                    # EXECUTION VALIDATION (same for both paths)
+                    # ============================================================
+                    if execution_confidence < MIN_EXECUTION_CONFIDENCE:
+                        logger.info(f"⏭️  {symbol}: Confidence too low ({execution_confidence:.2f} < {MIN_EXECUTION_CONFIDENCE})")
+                        log_skip_reason(symbol, "CONFIDENCE_TOO_LOW")
+                        continue
                     
-            except Exception as e:
-                logger.error(f"Error evaluating {symbol}: {e}")
+                    # Check if valid for execution
+                    if decision.action != "HOLD" and decision.is_valid_for_execution():
+                        logger.info(f"✅ {symbol}: {decision.action} signal, confidence={execution_confidence:.2f}")
+                        # 🔧 FIX: Only count EXECUTED trades, not attempted ones
+                        # This allows crypto symbols to be evaluated even if early forex trades fail
+                        
+                        # ============================================================
+                        # EXECUTION LAYER: Place order
+                        # ============================================================
+                        try:
+                            # Get technical data for SL/TP calculation
+                            tech_data = analysis.get("technical", {}).get("data", {})
+                            atr = tech_data.get("atr", 0.001)
+                            current_price = tech_data.get("close", 0)
+                            
+                            # Calculate SL and TP based on ATR
+                            if decision.action == "BUY":
+                                sl_price = current_price - (atr * 2)
+                                tp_price = current_price + (atr * 3)
+                            else:  # SELL
+                                sl_price = current_price + (atr * 2)
+                                tp_price = current_price - (atr * 3)
+                            
+                            # Calculate position size using risk manager
+                            position_size = risk.calculate_position_size(
+                                symbol=symbol,
+                                entry_price=current_price,
+                                stop_loss_price=sl_price,
+                                confidence=execution_confidence
+                            )
+                            
+                            if position_size <= 0:
+                                logger.info(f"⏭️  {symbol}: Position size calculation failed (size={position_size})")
+                                continue
+                            
+                            logger.info(f"📊 {symbol}: Calculated position size = {position_size:.2f} lots")
+                            logger.info(f"📋 Preparing order request for {symbol}: {decision.action} {position_size:.2f} lots")
+                            logger.info(f"   Entry: {current_price:.5f}, SL: {sl_price:.5f}, TP: {tp_price:.5f}")
+                            
+                            # Place market order
+                            success, order_result, error_msg = execution.place_market_order(
+                                symbol=symbol,
+                                order_type=decision.action,
+                                volume=position_size,
+                                sl_price=sl_price,
+                                tp_price=tp_price,
+                                comment=f"AI_SCALPING_{decision.action}_{execution_confidence:.0%}",
+                                atr=atr
+                            )
+                            
+                            if success and order_result:
+                                new_trades_count += 1  # 🔧 ONLY INCREMENT AFTER SUCCESSFUL EXECUTION
+                                retcode = order_result.get("retcode")
+                                order_ticket = order_result.get("order", 0)
+                                logger.info(f"✅ {symbol}: Order executed successfully!")
+                                logger.info(f"📤 Sending order to MT5")
+                                logger.info(f"   mt5.order_send(...)")
+                                logger.info(f"✅ Order result retcode={retcode}, ticket={order_ticket}, volume={order_result.get('volume'):.2f}")
+                                
+                                # Log execution to database
+                                try:
+                                    db.save_trade({
+                                        "symbol": symbol,
+                                        "action": decision.action,
+                                        "volume": position_size,
+                                        "entry_price": order_result.get("price", current_price),
+                                        "ticket": order_ticket,
+                                        "status": "OPEN",
+                                        "confidence": execution_confidence,
+                                        "reason": decision.reason[0] if decision.reason else "AI Decision",
+                                        "sl_price": sl_price,
+                                        "tp_price": tp_price,
+                                    })
+                                    logger.info(f"✅ {symbol}: Trade execution logged to database")
+                                except Exception as log_err:
+                                    logger.warning(f"Failed to log execution to database: {log_err}")
+                            else:
+                                logger.error(f"❌ {symbol}: Order execution failed - {error_msg}")
+                            
+                        except Exception as exec_error:
+                            logger.error(f"❌ Execution error for {symbol}: {exec_error}", exc_info=True)
+                    else:
+                        logger.info(f"⏭️  {symbol}: Decision not valid for execution")
+                    
+                except Exception as e:
+                    logger.error(f"Error evaluating {symbol}: {e}")
         
         logger.info(f"Trading loop complete: {new_trades_count} new opportunities evaluated")
         

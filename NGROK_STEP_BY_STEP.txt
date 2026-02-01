@@ -1,0 +1,330 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║                      🌐 NGROK - STEP BY STEP GUIDE 🌐                        ║
+║                                                                               ║
+║              Expose Your A-Bot to the Internet in 5 Minutes                  ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+
+STEP 0️⃣ : PREREQUISITES
+═════════════════════════════════════════════════════════════════════════════════
+
+Before starting, make sure you have:
+
+  ✅ Python 3.11 installed
+  ✅ A-Bot folder downloaded
+  ✅ Internet connection (required)
+  ✅ PowerShell (Windows)
+  ✅ A free Ngrok account (you'll create it below)
+
+If you don't have A-Bot running yet:
+  💻 See: DEPLOYMENT_STATUS_FINAL.txt
+
+
+STEP 1️⃣ : GET YOUR NGROK TOKEN
+═════════════════════════════════════════════════════════════════════════════════
+
+1.1) Open your web browser and go to:
+     https://dashboard.ngrok.com
+
+1.2) You'll see either:
+     • Login page → Click "Sign up" for free
+     • Dashboard → Skip to 1.4
+
+1.3) Fill in the signup form:
+     • Email: your@email.com
+     • Password: Create one
+     • Click "Sign up"
+
+1.4) Verify your email (check your inbox)
+
+1.5) After logging in, go to:
+     https://dashboard.ngrok.com/auth/your-authtoken
+
+1.6) You'll see a long string like:
+     3O1_2AbCdEfGhIjKlMnOpQrStUvWxYz1A2B3C4D5E6F7G8H9I
+
+1.7) Copy this entire string (it's your auth token)
+     ⚠️  Keep this secret! Don't share it publicly.
+
+
+STEP 2️⃣ : OPEN POWERSHELL
+═════════════════════════════════════════════════════════════════════════════════
+
+2.1) Press the Windows key
+     
+2.2) Type: PowerShell
+     
+2.3) Click: Windows PowerShell (not ISE)
+     
+2.4) You should see something like:
+     PS C:\Users\YourName>
+
+
+STEP 3️⃣ : NAVIGATE TO A-BOT FOLDER
+═════════════════════════════════════════════════════════════════════════════════
+
+3.1) In PowerShell, type:
+     cd Downloads\Metatrade
+
+3.2) Press Enter
+
+3.3) You should see:
+     PS C:\Users\Shadow\Downloads\Metatrade>
+
+     (If not, type: cd c:\Users\Shadow\Downloads\Metatrade)
+
+
+STEP 4️⃣ : RUN THE NGROK SETUP SCRIPT
+═════════════════════════════════════════════════════════════════════════════════
+
+4.1) In PowerShell, type:
+     powershell -ExecutionPolicy Bypass -File RUN_NGROK_NOW.ps1
+
+4.2) Press Enter
+
+4.3) The script will start and show:
+     ╔════════════════════════════════════════════════════╗
+     ║         🚀 A-Bot Ngrok Quick Setup 🚀            ║
+     ╚════════════════════════════════════════════════════╝
+
+4.4) It will check if Ngrok is installed:
+     • If YES: Shows "Ngrok already installed ✅"
+     • If NO: Downloads and installs it automatically
+
+
+STEP 5️⃣ : ENTER YOUR NGROK TOKEN
+═════════════════════════════════════════════════════════════════════════════════
+
+5.1) The script will ask:
+     🔑 Ingresa tu Ngrok auth token:
+
+5.2) Paste the token you copied in STEP 1:
+     3O1_2AbCdEfGhIjKlMnOpQrStUvWxYz1A2B3C4D5E6F7G8H9I
+
+5.3) Press Enter
+
+5.4) You should see:
+     ✅ Token configured correctly
+
+
+STEP 6️⃣ : VERIFY SERVICES
+═════════════════════════════════════════════════════════════════════════════════
+
+6.1) The script checks if A-Bot is running:
+
+     ✅ A-Bot API active on port 8002
+     ✅ A-Bot Dashboard active on port 8504
+
+     If you see both ✅, great! Continue.
+
+6.2) If you see ⚠️ (not running), you need to start them:
+     
+     In another PowerShell window:
+     
+     For API:
+       python -m uvicorn app.api.server:app --host 0.0.0.0 --port 8002
+     
+     For Dashboard:
+       streamlit run app/main_ui.py --server.port 8504
+     
+     Then run the Ngrok script again.
+
+
+STEP 7️⃣ : NGROK IS RUNNING!
+═════════════════════════════════════════════════════════════════════════════════
+
+7.1) You'll see a beautiful box showing:
+
+     ╔════════════════════════════════════════════════╗
+     ║          🌐 NGROK EN EJECUCIÓN 🌐            ║
+     ║                                                ║
+     ║ 📊 Panel: http://localhost:4040              ║
+     ║ 🌐 API:   https://xxxx-xxxx.ngrok.io         ║
+     ║ 📱 Dashboard: https://yyyy-yyyy.ngrok.io     ║
+     ║                                                ║
+     ║ ⏸️  Press CTRL+C to stop                       ║
+     ║                                                ║
+     ╚════════════════════════════════════════════════╝
+
+7.2) THIS IS IMPORTANT: Your actual URLs will be different!
+     Example:
+     • https://a1b2c3d4e5f6.ngrok.io (API)
+     • https://f6e5d4c3b2a1.ngrok.io (Dashboard)
+
+
+STEP 8️⃣ : COPY YOUR PUBLIC URLS
+═════════════════════════════════════════════════════════════════════════════════
+
+8.1) In the PowerShell window, look for:
+     
+     Forwarding    https://abc12345678.ngrok.io -> http://localhost:8002
+     Forwarding    https://xyz98765432.ngrok.io -> http://localhost:8504
+
+8.2) Copy these URLs somewhere safe (text file, notes, etc):
+     • API URL: https://abc12345678.ngrok.io
+     • Dashboard URL: https://xyz98765432.ngrok.io
+
+8.3) These are your PUBLIC URLs that anyone can use to access A-Bot!
+
+
+STEP 9️⃣ : ACCESS YOUR A-BOT FROM ANYWHERE
+═════════════════════════════════════════════════════════════════════════════════
+
+9.1) Open a new browser tab
+
+9.2) Paste your Dashboard URL:
+     https://xyz98765432.ngrok.io
+
+9.3) You should see your A-Bot Dashboard appear!
+
+9.4) Test it from different devices:
+     • Your phone
+     • Another computer
+     • A tablet
+     • Even from a friend's computer!
+
+9.5) Everyone will see the same A-Bot Dashboard
+
+
+STEP 🔟 : MONITOR YOUR TUNNELS
+═════════════════════════════════════════════════════════════════════════════════
+
+10.1) While Ngrok is running, open a new browser tab:
+      http://localhost:4040
+
+10.2) You'll see the Ngrok Inspector showing:
+      • All requests to your bot
+      • Request headers and bodies
+      • Response codes
+      • Connection statistics
+      • Request timing
+
+10.3) This helps you see exactly what's happening with your bot!
+
+
+═════════════════════════════════════════════════════════════════════════════════
+                            🎉 YOU'RE LIVE! 🎉
+═════════════════════════════════════════════════════════════════════════════════
+
+Your A-Bot is now:
+  ✅ Trading 24/7
+  ✅ Accessible from the internet
+  ✅ Monitoring on your dashboard
+  ✅ Logging all activity
+  ✅ Protected with HTTPS encryption
+
+
+═════════════════════════════════════════════════════════════════════════════════
+                         📌 IMPORTANT NOTES
+═════════════════════════════════════════════════════════════════════════════════
+
+1. ⏸️  STOPPING NGROK
+   ────────────────────
+   Press CTRL+C in the PowerShell window to stop.
+   Your A-Bot keeps running fine, just not accessible via internet.
+
+2. 🔄 RESTARTING NGROK
+   ────────────────────
+   Run the same command again:
+   powershell -ExecutionPolicy Bypass -File RUN_NGROK_NOW.ps1
+   
+   You'll get new URLs each time (free plan).
+   To keep the same URL, upgrade to Ngrok Pro.
+
+3. 🔑 AUTHENTICATION
+   ────────────────────
+   Currently your dashboard is PUBLIC!
+   Anyone with the URL can access it.
+   
+   To add a password, run:
+   ngrok http 8504 --basic-auth "username:password"
+
+4. 💾 KEEPING TRACK OF URLs
+   ────────────────────────
+   Your URLs change each time you restart (free plan).
+   Save them as you go, or upgrade to Pro for static URLs.
+
+5. 🌍 SHARING YOUR BOT
+   ────────────────────
+   The Ngrok URL works from anywhere:
+   • Share it with team members
+   • View from your phone
+   • Monitor from anywhere on Earth
+
+6. ⚠️  URL SECURITY
+   ──────────────
+   Once you get the URL, DON'T share it in public forums!
+   Anyone with the URL can see your bot.
+
+
+═════════════════════════════════════════════════════════════════════════════════
+                    ❓ TROUBLESHOOTING THIS GUIDE
+═════════════════════════════════════════════════════════════════════════════════
+
+"I don't see my public URLs"
+  → Wait 10 seconds after Ngrok starts
+  → Check that text says "Forwarding"
+  → Make sure A-Bot is running (see Step 6)
+
+"The URLs don't work"
+  → Wait 30 seconds for Ngrok to stabilize
+  → Check http://localhost:4040 to see if requests arrive
+  → Try clicking the URL directly from the PowerShell output
+
+"PowerShell won't run the script"
+  → Type: Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+  → Then try the script again
+
+"Ngrok keeps disconnecting"
+  → Check your internet connection
+  → Restart the script
+  → Try: ngrok http 8504 --region eu (different region)
+
+"I can't find my auth token"
+  → Go to: https://dashboard.ngrok.com/auth/your-authtoken
+  → Copy the string shown on that page
+
+"I don't have an Ngrok account"
+  → Go to: https://dashboard.ngrok.com
+  → Click "Sign up" (it's free!)
+  → Verify your email
+  → Get your token
+
+
+═════════════════════════════════════════════════════════════════════════════════
+                         📚 NEXT STEPS
+═════════════════════════════════════════════════════════════════════════════════
+
+Now that you have public access:
+
+1. MONITOR TRADING:
+   Visit your Dashboard URL regularly to see trades executing
+
+2. MANAGE RISK:
+   Set stop losses and take profits appropriately
+
+3. REVIEW LOGS:
+   Check the logs tab to see what your bot is doing
+
+4. TWEAK PARAMETERS:
+   Adjust trading parameters in the Configuration tab
+
+5. UPGRADE NGROK (OPTIONAL):
+   If you want static URLs that never change:
+   Go to https://ngrok.com/pricing
+
+
+═════════════════════════════════════════════════════════════════════════════════
+
+Questions? Check:
+  📄 NGROK_CONFIG_COMPLETE.txt - Full documentation
+  📄 NGROK_SETUP.md - Comprehensive guide
+  📄 DEPLOYMENT_STATUS_FINAL.txt - Full system status
+
+Still stuck? Visit: https://ngrok.com/docs
+
+Happy trading! 🚀
+
+═════════════════════════════════════════════════════════════════════════════════

@@ -68,12 +68,13 @@ class RiskManager:
         self.risk_per_trade_pct = 2.0            # Base 2% (adjusted per symbol type)
         self.max_daily_loss_pct = 10.0           # 10% max daily loss
         self.max_drawdown_pct = 15.0             # 15% max drawdown
-        self.max_trades_per_currency = 5         # 5 trades per currency
+        self.max_trades_per_currency = 12        # 🔥 12 trades per currency (scalping aggressive)
         self.max_slippage_pips = 5.0             # Slippage flexible
-        self.max_trade_risk_pct = 3.0            # 3% per trade max
+        self.max_trade_risk_pct = 5.0            # 🔥 5% per trade max (increased for A+ setups)
         self.default_stop_loss_pct = 0.008       # Tighter SL for scalping
-        self.hard_max_volume_lots = 0.50         # Hard cap 0.50 lots
-        self.crypto_max_volume_lots = 0.50       # CRYPTOS: 0.50 max volume
+        self.hard_max_volume_lots = 2.0          # 🔥 Dynamic cap: 2.0 lots max (was 0.50)
+        self.crypto_max_volume_lots = 1.0        # CRYPTOS: 1.0 max volume (was 0.50)
+        self.max_total_exposure_pct = 15.0       # 🔥 15% max total open risk
         # Horario extendido: operar 24h
         self.trading_hours_start = time(0, 0)
         self.trading_hours_end = time(23, 59)
@@ -440,7 +441,8 @@ class RiskManager:
         symbol: str, 
         entry_price: float, 
         stop_loss_price: float,
-        risk_amount: Optional[float] = None
+        risk_amount: Optional[float] = None,
+        confidence: Optional[float] = None
     ) -> float:
         """
         Calculate position size based on risk
@@ -467,15 +469,28 @@ class RiskManager:
         if equity <= 0:
             return 0.01
         
-        # 🥈 SOLUTION 2: Increase risk for FOREX to ensure execution on small accounts
-        # Use elevated risk for FOREX pairs to hit volume minimums
-        risk_pct = self.risk_per_trade_pct
-        is_forex = not any(crypto in symbol.upper() for crypto in self.CRYPTO_SYMBOLS)
+        # 🔥 PALANCA 1: RIESGO DINÁMICO POR CALIDAD/CONFIANZA
+        # Escala riesgo según calidad del setup
+        risk_pct = self.risk_per_trade_pct  # Base: 2%
         
+        # Multiplicador por confianza (confidence 0-1)
+        if confidence is not None:
+            if confidence >= 0.85:  # Setup A+ (85%+)
+                risk_multiplier = 2.0   # 4% risk
+                logger.info(f"🔥 {symbol}: A+ setup (confidence={confidence:.2f}) → risk x2.0")
+            elif confidence >= 0.75:  # Setup A (75%+)
+                risk_multiplier = 1.5   # 3% risk
+                logger.info(f"🔥 {symbol}: A setup (confidence={confidence:.2f}) → risk x1.5")
+            else:  # Setup normal
+                risk_multiplier = 1.0   # 2% risk
+            
+            risk_pct = risk_pct * risk_multiplier
+        
+        # Boost adicional para FOREX en cuentas pequeñas
+        is_forex = not any(crypto in symbol.upper() for crypto in self.CRYPTO_SYMBOLS)
         if is_forex and equity < 10000:
-            # For FOREX on small accounts, increase risk by 2x to ensure execution
-            risk_pct = min(self.risk_per_trade_pct * 2.0, self.max_trade_risk_pct)
-            logger.info(f"🥈 {symbol} FOREX risk boost: {self.risk_per_trade_pct}% → {risk_pct}% (small account)")
+            risk_pct = min(risk_pct * 1.5, self.max_trade_risk_pct)
+            logger.info(f"🥈 {symbol} FOREX small account boost: → {risk_pct:.1f}%")
         
         # Calculate risk amount (bounded by max_trade_risk_pct)
         if risk_amount is None:
@@ -522,35 +537,79 @@ class RiskManager:
             )
         else:
             # 🔵 FOREX (EUR/USD, GBP/USD, etc.)
-            # Formula: volume = risk_amount / (distance_points * contract_size)
-            # Uses points (pips normalized) for precision
-            price_risk_points = price_risk / point
-            if price_risk_points > 0:
-                volume = risk_amount / (price_risk_points * contract_size)
+            # Formula correcta: volume = risk_amount / (price_risk * contract_size)
+            # price_risk ya está en precio, multiplicar por contract_size da USD por lote
+            loss_per_lot = price_risk * contract_size
+            if loss_per_lot > 0:
+                volume = risk_amount / loss_per_lot
             else:
                 return 0.01
             logger.info(
                 f"{symbol} [FOREX] position sizing: "
                 f"risk_amount={risk_amount:.2f}, price_risk={price_risk:.5f}, "
-                f"distance_points={price_risk_points:.2f}, contract_size={contract_size} → "
+                f"loss_per_lot={loss_per_lot:.2f}, contract_size={contract_size} → "
                 f"volume={volume:.6f} lots"
             )
         
         lots = volume
         
-        # Apply limits
-        max_volume = min(symbol_info.get('volume_max', 100.0), self.hard_max_volume_lots)
+        # ✅ FACTOR DE CONGESTIÓN: Reducir lotes cuando hay muchas posiciones abiertas
+        MAX_OPEN_TRADES = 12
+        try:
+            portfolio = self.portfolio_manager if hasattr(self, 'portfolio_manager') else None
+            if portfolio is None:
+                # Try to get it dynamically
+                from app.trading.portfolio import get_portfolio_manager
+                portfolio = get_portfolio_manager()
+            
+            open_positions = portfolio.get_open_positions() if portfolio else []
+            num_open = len(open_positions)
+            
+            if num_open > 0:
+                # Congestión: mientras más posiciones, más chico el lote
+                # max=0 pos → 1.0x (volumen completo)
+                # max=6 pos → 0.5x (mitad)
+                # max=12 pos → 0.0x (nada)
+                congestion_factor = max(0.3, 1.0 - (num_open / MAX_OPEN_TRADES))
+                lots *= congestion_factor
+                logger.info(f"📊 {symbol}: Congestion factor={congestion_factor:.2f} ({num_open} open positions). Volume: {volume:.2f} → {lots:.2f}")
+        except Exception as e:
+            logger.debug(f"Could not apply congestion factor: {e}")
+        
+        # 🔥 PALANCA 3: CAP DINÁMICO (no más cap duro de 0.50)
+        # Cap crece con equity: equity/5000 = lotes máximos
+        dynamic_cap = equity / 5000  # 11k → 2.2 lots, 50k → 10 lots
+        max_volume = min(
+            symbol_info.get('volume_max', 100.0),
+            self.hard_max_volume_lots,
+            dynamic_cap
+        )
         volume_step = symbol_info.get('volume_step', 0.01)
 
         # Cap adicional para cripto
         if any(crypto in symbol.upper() for crypto in self.CRYPTO_SYMBOLS):
             max_volume = min(max_volume, self.crypto_max_volume_lots)
         
+        logger.info(f"💼 {symbol}: dynamic_cap={dynamic_cap:.2f}, max_volume={max_volume:.2f}")
+        
         # � SCALPING MODE: SKIP if below minimum (no clamp)
         if lots < min_volume:
-            logger.warning(
-                f"🚫 SKIP: {symbol} volume {lots:.6f} < min {min_volume}. Trade skipped (no clamp)"
-            )
+            # 🔴 DETAILED SKIP REASON - VOLUME ANALYSIS
+            account_info = self.mt5.get_account_info() if hasattr(self, 'mt5') else None
+            balance = account_info.get('balance', 0) if account_info else 0
+            max_allowed_risk = balance * (self.risk_per_trade_pct / 100) if balance > 0 else 0
+            
+            # Calculate implied risk at minimum volume
+            # (This is calculated based on entry/SL from earlier in the call stack)
+            implied_risk_at_min = "unknown"  # We don't have entry/SL here
+            
+            logger.warning(f"🔴 {symbol} VOLUME SKIP ANALYSIS:")
+            logger.warning(f"   calculated_volume: {lots:.6f} lots")
+            logger.warning(f"   broker_min_volume: {min_volume:.6f} lots")
+            logger.warning(f"   implied_risk_if_min: {implied_risk_at_min}")
+            logger.warning(f"   max_allowed_risk: ${max_allowed_risk:,.2f}")
+            logger.warning(f"   ❌ SKIP: volume {lots:.6f} < {min_volume:.6f}")
+            
             return 0.0  # Return 0.0 to signal SKIP
         
         lots = min(max_volume, lots)
@@ -780,12 +839,32 @@ class RiskManager:
         Returns:
             Tuple of (can_trade, error_message)
         """
+        # 🔥 PALANCA 5: CONTROL DE EXPOSICIÓN TOTAL (FIXED)
+        # Calcular riesgo total real basado en risk_per_trade_pct configurado
+        account_info = self.mt5.get_account_info()
+        if account_info:
+            equity = account_info.get('equity', 0)
+            if equity > 0:
+                open_positions = self.portfolio.get_open_positions()
+                
+                # ✅ FIX: Usar risk_per_trade_pct por posición, NO notional value
+                # Cada posición abierta arriesga ~2-3% dependiendo del tipo (FOREX_MAJOR=2%, CRYPTO=3%)
+                # Con max_positions=50, exposición máxima teórica = 50 * 2% = 100% (BUT capped at 15%)
+                risk_pct_symbol = self.get_risk_pct_for_symbol(symbol)
+                total_risk_pct = len(open_positions) * risk_pct_symbol
+                
+                if total_risk_pct >= self.max_total_exposure_pct:
+                    return False, f"Max total exposure reached: {total_risk_pct:.1f}% >= {self.max_total_exposure_pct}%"
+                
+                total_risk_usd = (total_risk_pct / 100) * equity
+                logger.info(f"💼 Total exposure: {total_risk_pct:.2f}% / {self.max_total_exposure_pct}% (${total_risk_usd:.0f}, {len(open_positions)} positions)")
+        
         # Check position count limits
         open_positions = self.portfolio.get_open_positions_count()
         if open_positions >= self.max_positions:
             return False, f"Max positions limit reached: {open_positions}/{self.max_positions}"
         
-        # Check currency conflict (max 2 trades per currency pair)
+        # Check currency conflict (max trades per currency pair)
         open_positions = self.portfolio.get_open_positions()
         same_currency_count = sum(
             1 for pos in open_positions

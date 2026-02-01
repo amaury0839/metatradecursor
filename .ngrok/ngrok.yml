@@ -1,0 +1,24 @@
+version: "2"
+web_addr: "127.0.0.1:4040"
+
+tunnels:
+  a-bot-api:
+    proto: http
+    addr: 8002
+    labels:
+      - edge=api-edge
+    metadata: "A-Bot Trading API"
+    
+  a-bot-dashboard:
+    proto: http
+    addr: 8504
+    labels:
+      - edge=dashboard-edge
+    metadata: "A-Bot Dashboard"
+
+# Inspect tunnel configuration
+inspect: true
+
+# Log format
+log: "ngrok.log"
+log_format: "json"

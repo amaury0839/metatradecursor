@@ -1,0 +1,10 @@
+version: "2"
+authtoken: 38lLxyye9Bkvt6AVTatO6kcdLla_4ii5JFb59FLK1cuMYa1eG
+
+tunnels:
+  api:
+    proto: http
+    addr: localhost:8000
+  ui:
+    proto: http
+    addr: localhost:8501

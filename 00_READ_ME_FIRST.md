@@ -1,3 +1,19 @@
+# 🚀 A-BOT - AI-POWERED TRADING SYSTEM
+
+## ⚡ QUICK START - EXPOSE TO INTERNET WITH NGROK
+
+Want A-Bot accessible from anywhere? Run this ONE command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File RUN_NGROK_NOW.ps1
+```
+
+✅ Will install Ngrok, configure it, and expose your A-Bot to the internet!
+
+**See**: [NGROK_QUICK_START.txt](NGROK_QUICK_START.txt) for details
+
+---
+
 # ✅ ADAPTIVE RISK OPTIMIZATION - FINAL SUMMARY
 
 ## 🎯 Mission Accomplished
