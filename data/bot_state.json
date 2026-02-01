@@ -2,21 +2,21 @@
   "mt5": {
     "connected": true,
     "account": 52704771,
-    "balance": 4811.2,
-    "equity": 4773.73,
-    "margin_free": 4463.25,
-    "margin_level": 1537.5322081937643
+    "balance": 4147.2,
+    "equity": 4131.69,
+    "margin_free": 3820.59,
+    "margin_level": 1328.0906460945032
   },
-  "last_update": "2026-01-31T18:23:04.295930",
+  "last_update": "2026-02-01T10:51:56.034605",
   "trading": {
-    "open_positions": 8,
-    "total_exposure": -0.7788077818423678,
-    "daily_trades": 1,
+    "open_positions": 9,
+    "total_exposure": -0.3739872685185186,
+    "daily_trades": 0,
     "win_rate": 0.0
   },
   "bot": {
     "running": true,
     "mode": "LIVE",
-    "last_analysis": "2026-01-31T18:23:04.288426"
+    "last_analysis": "2026-02-01T10:51:56.027607"
   }
 }

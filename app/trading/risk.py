@@ -567,10 +567,11 @@ class RiskManager:
             
             if num_open > 0:
                 # Congestión: mientras más posiciones, más chico el lote
-                # max=0 pos → 1.0x (volumen completo)
-                # max=6 pos → 0.5x (mitad)
-                # max=12 pos → 0.0x (nada)
-                congestion_factor = max(0.3, 1.0 - (num_open / MAX_OPEN_TRADES))
+                # 0 pos → 1.0x (100% volumen)
+                # 6 pos → 0.8x (80% volumen)
+                # 9 pos → 0.7x (70% volumen)
+                # 12 pos → 0.6x (60% volumen mínimo)
+                congestion_factor = max(0.6, 1.0 - (num_open / MAX_OPEN_TRADES) * 0.4)
                 lots *= congestion_factor
                 logger.info(f"📊 {symbol}: Congestion factor={congestion_factor:.2f} ({num_open} open positions). Volume: {volume:.2f} → {lots:.2f}")
         except Exception as e:

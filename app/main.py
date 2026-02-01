@@ -21,6 +21,7 @@ from app.ui.modern_dashboard import (
     render_dashboard_tab,
     render_positions_tab,
     render_analysis_tab,
+    render_account_tab,
     render_settings_tab,
     render_logs_tab,
     render_statement_tab,
@@ -66,13 +67,14 @@ def main():
     st.markdown("---")
     
     # Create tabs for main sections
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Dashboard",
-        "Positions",
-        "Analysis",
-        "Settings",
-        "Logs",
-        "Statement",
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "📊 Dashboard",
+        "💼 Positions",
+        "🧠 Analysis",
+        "💰 Account",
+        "⚙️ Settings",
+        "📜 Activity",
+        "📈 Statement",
     ])
     
     with tab1:
@@ -85,12 +87,15 @@ def main():
         render_analysis_tab()
     
     with tab4:
-        render_settings_tab()
+        render_account_tab()
     
     with tab5:
-        render_logs_tab()
+        render_settings_tab()
     
     with tab6:
+        render_logs_tab()
+    
+    with tab7:
         render_statement_tab()
     
     # Footer

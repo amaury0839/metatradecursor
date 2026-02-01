@@ -73,14 +73,23 @@ class EnhancedHourlyOptimizer:
         Run optimization synchronously (bridges async to sync)
         """
         try:
-            # Use asyncio to run the async hourly_optimization
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Check if there's already a running event loop (from Streamlit)
             try:
-                result = loop.run_until_complete(self.orchestrator.hourly_optimization())
-                return result if result else {}
-            finally:
-                loop.close()
+                loop = asyncio.get_running_loop()
+                # If we get here, we're in an async context - return fallback
+                logger.warning("⚠️  Already in async context, using sync fallback")
+                return self._run_optimization_fallback()
+            except RuntimeError:
+                # No running loop, safe to create new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(self.orchestrator.hourly_optimization())
+                    return result if result else {}
+                finally:
+                    # Properly close the loop
+                    loop.stop()
+                    loop.close()
         except Exception as e:
             logger.warning(f"⚠️  Async optimization failed, using sync fallback: {e}")
             return self._run_optimization_fallback()

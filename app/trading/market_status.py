@@ -25,13 +25,12 @@ class MarketStatus:
         # Saturday (6) not included = completely closed
     }
     
-    # Cryptocurrencies - always open
+    # Cryptocurrencies - always open (SOLO los VERIFICADOS en ICMarkets)
     # Crypto symbols that should always be tradable (used to bypass Forex hours)
     CRYPTO_24_7 = [
+        # VERIFICADOS y operando en ICMarkets Demo (10 total)
         "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD",
-        "DOGEUSD", "ADAUSD", "DOTUSD", "LTCUSD", "AVAXUSD",
-        # Legacy/extra coverage
-        "XMRUSD", "BSVUSD", "BCHUSD", "EOSPUSD"
+        "ADAUSD", "DOTUSD", "LTCUSD", "UNIUSD", "XLMUSD"
     ]
     
     def __init__(self):

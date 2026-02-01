@@ -381,11 +381,33 @@ class DatabaseManager:
             return -1
     
     def update_trade(self, ticket: int, trade_info: Dict[str, Any]) -> bool:
-        """Update existing trade"""
+        """Update existing trade with close details"""
         with self._lock:
             conn = self._get_conn()
             cursor = conn.cursor()
             try:
+                # Get current trade to calculate profit if not provided
+                cursor.execute("SELECT * FROM trades WHERE ticket = ?", (ticket,))
+                current_trade = cursor.fetchone()
+                
+                if not current_trade:
+                    logger.warning(f"Trade {ticket} not found for update")
+                    return False
+                
+                # Calculate profit if not provided and we have pricing
+                profit = trade_info.get('profit', 0)
+                if profit == 0 or profit is None:
+                    open_price = current_trade['open_price']
+                    close_price = trade_info.get('close_price')
+                    volume = current_trade['volume']
+                    position_type = current_trade['type']
+                    
+                    if open_price and close_price and volume:
+                        if position_type == 0:  # BUY
+                            profit = (close_price - open_price) * volume
+                        else:  # SELL
+                            profit = (open_price - close_price) * volume
+                
                 cursor.execute("""
                     UPDATE trades SET
                         close_price = ?,

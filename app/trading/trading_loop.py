@@ -377,21 +377,36 @@ def main_trading_loop():
                                 
                                 # Log execution to database
                                 try:
+                                    # Get close info from order result if position was closed
+                                    close_price = None
+                                    close_timestamp = None
+                                    profit = None
+                                    commission = None
+                                    swap = None
+                                    
+                                    # If this was immediately closed (e.g., RSI extreme), capture data
+                                    if order_result.get('bid'):
+                                        close_price = order_result.get('bid', current_price)
+                                    
                                     db.save_trade({
                                         "symbol": symbol,
-                                        "action": decision.action,
+                                        "type": decision.action,                    # ✅ Corrected field name
                                         "volume": position_size,
-                                        "entry_price": order_result.get("price", current_price),
+                                        "open_price": order_result.get("price", current_price),  # ✅ Corrected field name
                                         "ticket": order_ticket,
                                         "status": "OPEN",
-                                        "confidence": execution_confidence,
-                                        "reason": decision.reason[0] if decision.reason else "AI Decision",
-                                        "sl_price": sl_price,
-                                        "tp_price": tp_price,
+                                        "comment": decision.reason[0] if decision.reason else "AI Decision",  # ✅ Use 'comment' not 'reason'
+                                        "stop_loss": sl_price,                      # ✅ Corrected field name
+                                        "take_profit": tp_price,                    # ✅ Corrected field name
+                                        "close_price": close_price,
+                                        "close_timestamp": close_timestamp,
+                                        "profit": profit,
+                                        "commission": commission,
+                                        "swap": swap,
                                     })
                                     logger.info(f"✅ {symbol}: Trade execution logged to database")
                                 except Exception as log_err:
-                                    logger.warning(f"Failed to log execution to database: {log_err}")
+                                    logger.error(f"❌ Failed to log execution to database: {log_err}", exc_info=True)
                             else:
                                 logger.error(f"❌ {symbol}: Order execution failed - {error_msg}")
                             

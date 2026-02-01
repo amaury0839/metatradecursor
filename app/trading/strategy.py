@@ -160,6 +160,8 @@ class TradingStrategy:
 
     def _calc_indicators_with_profile(self, df: pd.DataFrame, profile: str) -> pd.DataFrame:
         """Compute indicators using profile-specific params."""
+        from app.ai.ai_signal_validator import get_ai_signal_validator
+        
         params = self.profiles[profile]
         df = df.copy()
         df['ema_fast'] = calculate_ema(df['close'], params['ema_fast'])
@@ -168,6 +170,39 @@ class TradingStrategy:
         df['atr'] = calculate_atr(df['high'], df['low'], df['close'], params['atr_period'])
         df['trend_bullish'] = df['ema_fast'] > df['ema_slow']
         df['trend_bearish'] = df['ema_fast'] < df['ema_slow']
+        
+        # 🤖 AI SIGNAL VALIDATOR - Add MSS, TMI, Vol Regime
+        validator = get_ai_signal_validator()
+        
+        # Calculate Market Strength Score
+        df['mss'] = validator.calculate_market_strength_score(
+            close=df['close'],
+            high=df['high'],
+            low=df['low'],
+            ema_fast=df['ema_fast'],
+            ema_slow=df['ema_slow'],
+            rsi=df['rsi'],
+            atr=df['atr'],
+        )
+        
+        # Calculate Trend Momentum Index
+        df['tmi'] = validator.calculate_trend_momentum_index(
+            close=df['close'],
+            ema_fast=df['ema_fast'],
+            ema_slow=df['ema_slow'],
+            rsi=df['rsi'],
+            volume=df.get('volume') if 'volume' in df else None,
+        )
+        
+        # Classify Volatility Regime
+        vol_regime, vol_score = validator.classify_volatility_regime(
+            atr=df['atr'],
+            close=df['close'],
+            lookback=20,
+        )
+        df['vol_regime'] = vol_regime
+        df['vol_score'] = vol_score
+        
         return df
     
     def calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -226,11 +261,17 @@ class TradingStrategy:
             'trend_bearish': bool(latest['trend_bearish']),
             'rsi_prev': float(prev['rsi']) if len(df) > 1 else float(latest['rsi']),
             'strategy_profile': profile,
+            # 🤖 AI INDICATORS
+            'mss': float(latest['mss']),  # Market Strength Score
+            'tmi': float(latest['tmi']),  # Trend Momentum Index
+            'vol_regime': str(latest['vol_regime']),  # Volatility Regime
+            'vol_score': float(latest['vol_score']),  # Volatility Score
         }
         
         # Generate signal
         signal = "HOLD"
         reasons = []
+        ai_validation = None  # Will be filled if signal is generated
         
         # Log análisis antes de generar la señal
         logger.info(
@@ -327,6 +368,40 @@ class TradingStrategy:
                 signal = "HOLD"
                 reasons.append("Trend: sin confirmación de cruce/RSI")
         
+        # 🤖 AI SIGNAL VALIDATION - Validate signal with AI before returning
+        if signal in ["BUY", "SELL"]:
+            from app.ai.ai_signal_validator import get_ai_signal_validator
+            validator = get_ai_signal_validator()
+            
+            try:
+                ai_validation = validator.validate_signal(
+                    df=df,
+                    signal_type=signal,
+                    current_rsi=float(latest['rsi']),
+                    ema_bullish=bool(latest['trend_bullish']),
+                )
+                
+                # If AI rejects the signal, downgrade to HOLD with reasoning
+                if not ai_validation['is_valid']:
+                    logger.warning(
+                        f"{symbol}: AI rejected {signal} signal - {ai_validation['reason']}"
+                    )
+                    signal = "HOLD"
+                    reasons.append(f"AI Validation: {ai_validation['reason']}")
+                else:
+                    # Signal confirmed by AI
+                    reasons.append(
+                        f"✅ AI Confirmed: {signal} (confidence={ai_validation['confidence']:.2f})"
+                    )
+                    indicators['ai_confidence'] = ai_validation['confidence']
+                    indicators['ai_validation'] = ai_validation
+                    
+            except Exception as e:
+                logger.error(f"AI validation error: {e}")
+                # If AI fails, proceed with signal but log the error
+                reasons.append(f"AI validation skipped: {str(e)}")
+        
+        indicators['signal_reasons'] = reasons
         return signal, indicators, None
     
     def get_atr_value(self, symbol: str, timeframe: str) -> Optional[float]:

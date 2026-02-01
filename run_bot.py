@@ -62,6 +62,18 @@ def main():
         config = get_config()
         logger.info(f"✅ Config loaded: {len(config.trading.default_symbols)} symbols")
         
+        # 🔍 Validate symbols against MT5
+        from app.trading.symbol_validator import get_symbol_validator
+        validator = get_symbol_validator()
+        valid_symbols = validator.validate_symbols(
+            candidates=config.trading.default_symbols,
+            skip_list=config.trading.symbols_to_skip
+        )
+        
+        # Update config with validated symbols
+        logger.info(f"📊 Using {len(valid_symbols)} validated symbols")
+        config.trading.default_symbols = valid_symbols
+        
         # Initialize and connect MT5
         mt5 = get_mt5_client()
         logger.info("✅ MT5 client initialized")

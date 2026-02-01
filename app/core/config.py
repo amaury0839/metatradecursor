@@ -24,7 +24,7 @@ class TradingConfig(BaseSettings):
     timezone: str = Field("America/New_York", alias="TIMEZONE")
     polling_interval_seconds: int = Field(60, alias="POLLING_INTERVAL_SECONDS")  # Increased from 30s to 60s for stability
     
-    # 🔧 EXPANDED: ALL 48 Forex + Crypto Pairs Available in MT5
+    # 🔧 EXPANDED: ALL SYMBOLS - Forex, Indices, Commodities, Futures, Crypto, Stocks
     default_symbols: List[str] = [
         # === MAJOR FOREX PAIRS (7) ===
         "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
@@ -36,9 +36,36 @@ class TradingConfig(BaseSettings):
         "GBPCHF", "GBPJPY", "GBPSGD", "NZDCAD", "NZDCHF", "NZDJPY", "USDHKD",
         "USDMXN", "USDSGD", "USDTRY", "USDZAR",
         
-        # === CRYPTO (9) ===
+        # === STOCK INDICES (8) ===
+        "US500", "US100", "NAS100", "UK100", "GER40", "FRA40", "AUS200", "HK50",
+        
+        # === COMMODITIES - METALS (3) ===
+        "GOLD", "SILVER", "COPPER",
+        
+        # === COMMODITIES - ENERGY (2) ===
+        "CRUDE", "NATGAS",
+        
+        # === COMMODITIES - AGRICULTURE (3) ===
+        "CORN", "WHEAT", "SUGAR",
+        
+        # === FUTURES - INDICES (4) ===
+        "ES", "NQ", "YM", "MES",
+        
+        # === FUTURES - ENERGY (3) ===
+        "CL", "NG", "BRENT",
+        
+        # === FUTURES - METALS (3) ===
+        "GC", "SI", "HG",
+        
+        # === CRYPTO (21) ===
         "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", 
-        "DOTUSD", "LTCUSD", "UNIUSD",
+        "DOTUSD", "LTCUSD", "UNIUSD", "XLMUSD", "DOGEUSD", "AVAXUSD",
+        "LINKUSD", "MATICUSD", "ATOMUSD", "POLKAUSD", "VETUSD", "FILUSD",
+        "ARBUSD", "OPUSD", "GMXUSD",
+        
+        # === STOCKS - MEGA CAP (15) ===
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "GOOG",
+        "JPM", "GS", "BAC", "NFLX", "ADBE", "INTC", "AMD",
     ]
     
     default_timeframe: str = "M15"  # M15 scalping (balanced for 200 trades)
@@ -49,11 +76,66 @@ class TradingConfig(BaseSettings):
     default_max_drawdown: float = Field(10.0, alias="DEFAULT_MAX_DRAWDOWN")  # 10% max drawdown
     default_max_positions: int = Field(200, alias="DEFAULT_MAX_POSITIONS")  # MAX 200 open trades
     
+    # 🔧 SYMBOL FILTERING - Dynamic validation
+    # Invalid symbols will be automatically removed during startup
+    symbols_to_skip: List[str] = Field(
+        default=[
+            "NAS100", "GER40", "UK100", "AUS200", "HK50",  # Indices that may have limited hours
+            "ZW", "ZS", "ZC",  # Futures that may not be available
+            "PARA", "DIS", "WFC", "USB", "COP", "CVX",  # Stocks that may not be on account
+        ],
+        alias="SYMBOLS_TO_SKIP"
+    )
+    
     # 🔧 Crypto-specific: ENABLED with adaptive sizing
     crypto_symbols: List[str] = [
         "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "LTCUSD", "DOGEUSD",
         "AVAXUSD", "POLKAUSD", "UNIUSD", "LINKUSD", "LUNAUSD", "MATICUSD",
-        "ATOMUSD", "VETUSD", "FILUSD", "ARBUSD", "OPUSD", "GMXUSD",
+        "ATOMUSD", "VETUSD", "FILUSD", "ARBUSD", "OPUSD", "GMXUSD", "XLMUSD",
+    ]
+    
+    # 🔧 Commodity symbols: Metals, Energy, Agriculture
+    commodity_symbols: List[str] = [
+        # Metals
+        "GOLD", "SILVER", "COPPER",
+        # Energy
+        "CRUDE", "NATGAS", "BRENT",
+        # Agriculture
+        "CORN", "WHEAT", "SUGAR", "COCOA", "COFFEE",
+    ]
+    
+    # 🔧 Futures symbols: Indices, Energy, Metals
+    futures_symbols: List[str] = [
+        # Indices Futures
+        "ES", "NQ", "YM", "MES", "MNQ", "MYM",
+        # Energy Futures
+        "CL", "NG", "BRENT",
+        # Metals Futures
+        "GC", "SI", "HG",
+        # Agricultural Futures
+        "ZC", "ZS", "ZW",
+    ]
+    
+    # 🔧 Stock symbols: Blue chip mega cap
+    stock_symbols: List[str] = [
+        # Tech Giants
+        "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "TSLA", "META", "ADBE", "INTC", "AMD",
+        # Finance
+        "JPM", "GS", "BAC", "WFC", "USB",
+        # Entertainment/Media
+        "NFLX", "DIS", "PARA",
+        # Healthcare
+        "JNJ", "UNH", "PFE", "LLY",
+        # Energy
+        "XOM", "CVX", "COP",
+    ]
+    
+    # 🔧 Index symbols
+    index_symbols: List[str] = [
+        "US500", "US100", "NAS100",
+        "UK100", "GER40", "FRA40",
+        "AUS200", "HK50", "SGX",
+        "NIFTYCOIN",
     ]
     enable_crypto_trading: bool = Field(True, alias="ENABLE_CRYPTO_TRADING")
     
