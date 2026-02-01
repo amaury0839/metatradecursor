@@ -92,19 +92,6 @@ def main():
     
     with tab6:
         render_statement_tab()
-
-
-if __name__ == "__main__":
-    main()
-    
-    # Auto-refresh every 5 seconds
-    import time
-    placeholder = st.empty()
-    with placeholder:
-        st.caption(f"🔄 Last update: {datetime.now().strftime('%H:%M:%S')}")
-    
-    time.sleep(5)
-    st.rerun()
     
     # Footer
     st.markdown("---")
@@ -118,3 +105,8 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     main()
+    
+    # Auto-refresh using Streamlit's built-in mechanism
+    import time
+    time.sleep(5)
+    st.rerun()
