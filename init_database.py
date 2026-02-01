@@ -64,10 +64,10 @@ def init_database():
         print("  ✅ app/main.py - Trade saving/updating")
         print("  ✅ app/ui/pages_history.py - History visualization")
         print("  ✅ app/ui/pages_database_analytics.py - Analytics dashboard")
-        print("  ✅ app/ui_improved.py - UI integration (Analytics tab)")
+        print("  ✅ app/main.py - UI integration (Analytics tab)")
         
         print("\nNext steps:")
-        print("  1. Run the bot: streamlit run app/ui_improved.py")
+        print("  1. Run the bot: streamlit run app/main.py")
         print("  2. Let it trade and collect data")
         print("  3. Check Analytics tab for historical data")
         print("  4. Migrate old trades: python migrate_trades.py --days 30")

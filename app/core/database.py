@@ -499,6 +499,39 @@ class DatabaseManager:
             
         finally:
             conn.commit()
+
+    def get_closed_trades(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        symbol: Optional[str] = None,
+    ) -> List[Dict]:
+        """Get closed trades within a date range (close_timestamp)."""
+        with self._lock:
+            conn = self._get_conn()
+            cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT * FROM trades
+                WHERE close_timestamp IS NOT NULL
+                  AND status = 'closed'
+                  AND close_timestamp >= ?
+                  AND close_timestamp <= ?
+            """
+            params = [start_date.isoformat(), end_date.isoformat()]
+
+            if symbol:
+                query += " AND symbol = ?"
+                params.append(symbol)
+
+            query += " ORDER BY close_timestamp ASC"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.commit()
     
     def get_performance_summary(self, days: int = 30) -> Dict[str, Any]:
         """Get performance summary"""

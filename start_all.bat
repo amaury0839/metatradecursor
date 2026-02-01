@@ -24,7 +24,7 @@ timeout /t 3 /nobreak >nul
 
 REM Start Streamlit UI
 echo [3/3] Starting Streamlit UI...
-start "Streamlit UI" /MIN python -m streamlit run app/ui_improved.py --server.port 8501 --logger.level=error
+start "Streamlit UI" /MIN python -m streamlit run app/main.py --server.port 8501 --logger.level=error
 timeout /t 3 /nobreak >nul
 
 REM Success message

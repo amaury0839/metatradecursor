@@ -405,6 +405,42 @@ def main_trading_loop():
         
         logger.info(f"Trading loop complete: {new_trades_count} new opportunities evaluated")
         
+        # Update shared state for UI
+        try:
+            from app.core.shared_state import get_shared_state_manager
+            shared_state = get_shared_state_manager()
+            
+            # Update MT5 status
+            if account_info:
+                shared_state.update_mt5_status(
+                    connected=True,
+                    account=account_info.get('login', 0),
+                    balance=account_info.get('balance', 0.0),
+                    equity=account_info.get('equity', 0.0),
+                    margin_free=account_info.get('margin_free', 0.0),
+                    margin_level=account_info.get('margin_level', 0.0)
+                )
+            
+            # Update trading stats
+            total_exposure_usd = sum([pos.get('profit', 0.0) for pos in open_positions])
+            exposure_pct = (total_exposure_usd / account_balance * 100) if account_balance > 0 else 0.0
+            
+            shared_state.update_trading_stats(
+                open_positions=len(open_positions),
+                total_exposure=exposure_pct,
+                daily_trades=new_trades_count,
+                win_rate=0.0  # TODO: Calculate from DB
+            )
+            
+            # Update bot status
+            shared_state.update_bot_status(
+                running=True,
+                mode=config.trading.mode,
+                last_analysis=datetime.now().isoformat()
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update shared state: {e}")
+        
     except Exception as e:
         logger.error(f"Fatal error in trading loop: {e}", exc_info=True)
 

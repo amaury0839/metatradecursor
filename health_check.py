@@ -64,7 +64,7 @@ def check_files():
     workspace = Path(__file__).parent
     critical_files = [
         'run_bot.py',
-        'app/ui_improved.py',
+        'app/main.py',
         'app/api/server.py',
         'app/main.py',
         'app/core/__init__.py',

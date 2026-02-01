@@ -46,7 +46,7 @@ class SystemManager:
             proc = subprocess.Popen(
                 [
                     sys.executable, "-m", "streamlit", "run",
-                    "app/ui_improved.py",
+                    "app/main.py",
                     "--server.port", "8501",
                     "--logger.level=error"  # Reduce noisy warnings
                 ],

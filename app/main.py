@@ -1,13 +1,12 @@
 """
-🎨 MODERN TRADING BOT INTERFACE
-Simplified, clean, value-driven Streamlit app entry point
+Modern trading bot interface.
+Simplified, clean, value-driven Streamlit app entry point.
 """
 
 import streamlit as st
 import sys
 from pathlib import Path
 from datetime import datetime
-import MetaTrader5 as mt5
 
 # Add app to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,14 +14,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.core.config import get_config
 from app.core.logger import setup_logger
 from app.core.database import get_database_manager
-from app.trading.mt5_client import get_mt5_client
 from app.ui.modern_dashboard import (
+    apply_ui_theme,
     render_header,
+    render_sidebar,
     render_dashboard_tab,
     render_positions_tab,
     render_analysis_tab,
     render_settings_tab,
-    render_logs_tab
+    render_logs_tab,
+    render_statement_tab,
 )
 
 logger = setup_logger("modern_ui_main")
@@ -32,8 +33,8 @@ logger = setup_logger("modern_ui_main")
 # ============================================================================
 
 st.set_page_config(
-    page_title="🤖 Trading Bot Dashboard",
-    page_icon="📈",
+    page_title="Trading Bot Dashboard",
+    page_icon="T",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
@@ -47,13 +48,6 @@ if "initialized" not in st.session_state:
     st.session_state.initialized = True
     st.session_state.config = get_config()
     st.session_state.db = get_database_manager()
-    st.session_state.mt5_connected = False
-    try:
-        mt5_client = get_mt5_client()
-        st.session_state.mt5_connected = mt5_client.is_connected()
-    except Exception as e:
-        logger.error(f"Failed to initialize MT5: {e}")
-        st.session_state.mt5_connected = False
 
 
 # ============================================================================
@@ -62,20 +56,23 @@ if "initialized" not in st.session_state:
 
 def main():
     """Main application entry point"""
+    apply_ui_theme()
     
     # Render header with status
     render_header()
+    render_sidebar()
     
     # Main navigation
     st.markdown("---")
     
     # Create tabs for main sections
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Dashboard",
-        "🔓 Positions",
-        "📉 Analysis",
-        "⚙️ Settings",
-        "📋 Logs"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Dashboard",
+        "Positions",
+        "Analysis",
+        "Settings",
+        "Logs",
+        "Statement",
     ])
     
     with tab1:
@@ -93,11 +90,27 @@ def main():
     with tab5:
         render_logs_tab()
     
+    with tab6:
+        render_statement_tab()
+
+
+if __name__ == "__main__":
+    main()
+    
+    # Auto-refresh every 5 seconds
+    import time
+    placeholder = st.empty()
+    with placeholder:
+        st.caption(f"🔄 Last update: {datetime.now().strftime('%H:%M:%S')}")
+    
+    time.sleep(5)
+    st.rerun()
+    
     # Footer
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #888; padding: 15px; font-size: 0.9em;'>
-        <p>🤖 AI Trading Bot Dashboard | v1.0.0</p>
+        <p>AI Trading Bot Dashboard | v1.0.0</p>
         <p>MetaTrader5 Integration | Advanced Risk Management</p>
     </div>
     """, unsafe_allow_html=True)

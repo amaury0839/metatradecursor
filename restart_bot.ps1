@@ -29,7 +29,7 @@ Start-Sleep -Seconds 5
 
 # Iniciar Streamlit UI
 Write-Host "Iniciando Streamlit UI..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$botPath'; & '$pythonExe' -m streamlit run app/ui_improved.py --server.port 8501" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$botPath'; & '$pythonExe' -m streamlit run app/main.py --server.port 8501" -WindowStyle Normal
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Green

@@ -29,7 +29,7 @@ print("""
 🎯 OPCIÓN 2: INICIO DIRECTO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  streamlit run app/ui_improved.py
+  streamlit run app/main.py
 
   Abre: http://localhost:8501
   Tab: "📉 Analytics" para ver datos históricos
@@ -92,7 +92,7 @@ pages_database_analytics.py
 ├── Pandas tables
 └── Filtros interactivos
 
-ui_improved.py
+main.py
 ├── 6 tabs principales
 ├── Tab "📉 Analytics" agregada
 ├── Todas las features integradas
@@ -147,7 +147,7 @@ IMPLEMENTACION_COMPLETADA.md → Checklist de completación
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Iniciar bot con BD:         python run_bot_with_db.py
-Iniciar UI directa:         streamlit run app/ui_improved.py
+Iniciar UI directa:         streamlit run app/main.py
 Verificar BD:               python init_database.py
 Migrar histórico:           python migrate_trades.py --days 90
 Migrar símbolos específicos: python migrate_trades.py --symbols EURUSD,XRPUSD

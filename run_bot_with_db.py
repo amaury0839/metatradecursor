@@ -67,7 +67,7 @@ def main():
         # Import and run Streamlit
         import subprocess
         result = subprocess.run(
-            [sys.executable, "-m", "streamlit", "run", "app/ui_improved.py"],
+            [sys.executable, "-m", "streamlit", "run", "app/main.py"],
             cwd=Path(__file__).parent
         )
         
